@@ -1,0 +1,200 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  RETAILER
+  SALESMAN
+  ORDER_DESK
+  ADMIN
+}
+
+enum SchemeType {
+  BUY_X_GET_Y
+  PERCENTAGE_DISCOUNT
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  ON_CREDIT_HOLD
+  REJECTED
+  FULFILLED
+  CANCELLED
+}
+
+enum OrderSource {
+  MANUAL
+  AI_TEXT
+  AI_IMAGE
+  AI_VOICE
+  SALESMAN
+}
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String   @unique
+  email      String?
+  role       UserRole
+  retailerId String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  retailer      Retailer?    @relation(fields: [retailerId], references: [id], onDelete: SetNull)
+  ordersCreated Order[]      @relation("OrderCreatedBy")
+  auditEvents   AuditEvent[] @relation("AuditActor")
+
+  @@index([retailerId])
+  @@index([role])
+}
+
+model Retailer {
+  id          String   @id @default(cuid())
+  shopName    String
+  ownerName   String
+  phone       String
+  creditLimit Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  users  User[]
+  prices RetailerProductPrice[]
+  orders Order[]
+
+  @@index([shopName])
+  @@index([phone])
+}
+
+model Product {
+  sku         String   @id
+  name        String
+  description String?
+  unitLabel   String
+  dealerPrice Decimal  @db.Decimal(12, 2)
+  gstRate     Decimal  @db.Decimal(5, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  inventory  Inventory?
+  prices     RetailerProductPrice[]
+  schemes    Scheme[]
+  orderItems OrderItem[]
+
+  @@index([isActive, name])
+}
+
+model RetailerProductPrice {
+  id            String   @id @default(cuid())
+  retailerId    String
+  productSku    String
+  sellingPrice  Decimal  @db.Decimal(12, 2)
+  effectiveFrom DateTime @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  retailer Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+
+  @@unique([retailerId, productSku])
+  @@index([productSku])
+}
+
+model Inventory {
+  productSku    String   @id
+  stockCases    Int      @default(0)
+  reservedCases Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+}
+
+model Scheme {
+  id              String     @id @default(cuid())
+  name            String
+  type            SchemeType
+  isActive        Boolean    @default(true)
+  startsAt        DateTime?  @db.Timestamptz(3)
+  endsAt          DateTime?  @db.Timestamptz(3)
+  minimumQuantity Int?
+  freeQuantity    Int?
+  discountPercent Decimal?   @db.Decimal(5, 2)
+  productSku      String
+  createdAt       DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(3)
+
+  product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+
+  @@index([productSku, isActive])
+  @@index([isActive, startsAt, endsAt])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  retailerId  String
+  createdById String
+  status      OrderStatus @default(DRAFT)
+  subtotal    Decimal     @default(0) @db.Decimal(14, 2)
+  discount    Decimal     @default(0) @db.Decimal(14, 2)
+  gstAmount   Decimal     @default(0) @db.Decimal(14, 2)
+  total       Decimal     @default(0) @db.Decimal(14, 2)
+  source      OrderSource
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+
+  retailer  Retailer    @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  createdBy User        @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     OrderItem[]
+
+  @@index([retailerId, createdAt])
+  @@index([createdById, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productSku  String
+  productName String
+  unitLabel   String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  gstRate     Decimal  @db.Decimal(5, 2)
+  gstAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  lineTotal   Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productSku], references: [sku], onDelete: Restrict)
+
+  @@unique([orderId, productSku])
+  @@index([productSku])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  eventType  String
+  entityType String
+  entityId   String
+  actorId    String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([entityId])
+}
