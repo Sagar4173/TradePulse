@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUpRight,
   Check,
+  LogIn,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -25,16 +26,16 @@ import { cn } from "@/lib/utils";
 
 const foundationChecks = [
   {
-    title: "Application shell",
-    detail: "Next.js App Router, TypeScript, Tailwind CSS and shadcn/ui.",
+    title: "Secure phone sign-in",
+    detail: "Six-digit OTP with expiry, attempt limits and request throttling.",
+  },
+  {
+    title: "Role-based access",
+    detail: "Central server-side permissions for admin, order desk, salesman and retailer.",
   },
   {
     title: "PostgreSQL data layer",
-    detail: "Prisma 7 with the PostgreSQL driver adapter and a migration workflow.",
-  },
-  {
-    title: "Seeded catalogue",
-    detail: "Three sample SKUs with stock, retailer pricing and starter schemes.",
+    detail: "Prisma 7 with a PostgreSQL driver adapter and additive migrations.",
   },
   {
     title: "Health endpoint",
@@ -99,13 +100,20 @@ export default function Home() {
           >
             Foundation
           </a>
+          <Link
+            href="/login"
+            className={cn(buttonVariants({ size: "sm" }), "h-9 px-3")}
+          >
+            <LogIn data-icon="inline-start" />
+            Sign in
+          </Link>
           <a
             href="/api/health"
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "bg-background/70 backdrop-blur",
+              "hidden h-9 bg-background/70 px-3 backdrop-blur sm:inline-flex",
             )}
           >
             <Activity data-icon="inline-start" />
@@ -186,19 +194,19 @@ export default function Home() {
             <CardHeader className="gap-3">
               <div className="flex items-center justify-between gap-4">
                 <Badge variant="secondary" className="rounded-full">
-                  Foundation ready
+                  Access foundation ready
                 </Badge>
                 <span className="text-xs font-medium tracking-[0.18em] text-muted-foreground">
-                  MILESTONE 01
+                  MILESTONE 02
                 </span>
               </div>
               <CardTitle className="max-w-sm text-2xl leading-tight tracking-tight">
-                A clean base for the work that matters.
+                A secure base for distribution operations.
               </CardTitle>
               <CardDescription className="max-w-md leading-6">
-                The application, database and seed layer are in place. No
-                authentication, AI capture or ordering flows are presented as
-                complete.
+                Phone authentication, role-aware access and a protected
+                application shell are in place. Ordering and AI capture remain
+                upcoming milestones.
               </CardDescription>
             </CardHeader>
 
@@ -284,16 +292,17 @@ export default function Home() {
           </div>
 
           <p className="mt-6 max-w-3xl text-xs leading-5 text-muted-foreground">
-            These modules are intentionally not implemented in Milestone 1.
-            TradePulse currently ships the project foundation, relational data
-            model, seed data, landing page and health check only.
+            These modules remain upcoming beyond Milestone 2. TradePulse
+            currently ships secure phone sign-in, role-based access, a protected
+            application shell, the relational data model, seed data and a health
+            check.
           </p>
         </section>
       </main>
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-2 border-t border-border/70 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
         <p>TradePulse · Smarter Distribution. Faster Ordering.</p>
-        <p>Milestone 01 · Project foundation</p>
+        <p>Milestone 02 · Authentication, roles &amp; protected shell</p>
       </footer>
     </div>
   );

@@ -3,6 +3,10 @@ import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "@/generated/prisma/client";
+import {
+  parseDatabaseConnectionTarget,
+  TARGET_OVERRIDE_ENVIRONMENT_VARIABLES,
+} from "@/lib/db/connection-target";
 
 const globalForPrisma = globalThis as typeof globalThis & {
   tradepulsePrisma?: PrismaClient;
@@ -22,22 +26,24 @@ function getDatabaseConfig(): DatabaseConfig {
     );
   }
 
-  let databaseUrl: URL;
-
-  try {
-    databaseUrl = new URL(connectionString);
-  } catch {
-    // Do not surface the raw URL: a malformed DSN can contain credentials.
-    throw new Error("DATABASE_URL is not a valid PostgreSQL connection URL.");
+  for (const name of TARGET_OVERRIDE_ENVIRONMENT_VARIABLES) {
+    if (process.env[name]?.trim()) {
+      throw new Error(
+        `${name} is set. Configure the complete database target in DATABASE_URL and remove target-override environment variables.`,
+      );
+    }
   }
 
-  if (!["postgres:", "postgresql:"].includes(databaseUrl.protocol)) {
-    throw new Error("DATABASE_URL must use the postgres or postgresql protocol.");
+  const parsed = parseDatabaseConnectionTarget(connectionString);
+
+  if (!parsed.ok) {
+    // Do not surface the raw URL: a malformed DSN can contain credentials.
+    throw new Error(`DATABASE_URL is not valid: ${parsed.reason}.`);
   }
 
   return {
     connectionString,
-    schema: databaseUrl.searchParams.get("schema")?.trim() || undefined,
+    schema: parsed.schemaExplicit ? parsed.target.schema : undefined,
   };
 }
 

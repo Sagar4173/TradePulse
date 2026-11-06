@@ -15,6 +15,11 @@ enum UserRole {
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum SchemeType {
   BUY_X_GET_Y
   PERCENTAGE_DISCOUNT
@@ -38,22 +43,46 @@ enum OrderSource {
   SALESMAN
 }
 
-model User {
-  id         String   @id @default(cuid())
-  name       String
-  phone      String   @unique
-  email      String?
-  role       UserRole
-  retailerId String?
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+enum OtpReservationStatus {
+  PENDING
+  CONSUMED
+  FAILED
+  ABANDONED
+}
 
-  retailer      Retailer?    @relation(fields: [retailerId], references: [id], onDelete: SetNull)
-  ordersCreated Order[]      @relation("OrderCreatedBy")
-  auditEvents   AuditEvent[] @relation("AuditActor")
+enum RetailerLinkRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id              String     @id @default(cuid())
+  name            String
+  phone           String     @unique
+  /// Canonical E.164 identity used for lookups. Kept in sync on every write.
+  phoneNormalized String     @unique
+  email           String?
+  role            UserRole
+  status          UserStatus @default(ACTIVE)
+  retailerId      String?
+  phoneVerifiedAt DateTime?  @db.Timestamptz(3)
+  lastLoginAt     DateTime?  @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(3)
+
+  retailer             Retailer?                    @relation(fields: [retailerId], references: [id], onDelete: SetNull)
+  ordersCreated        Order[]                      @relation("OrderCreatedBy")
+  auditEvents          AuditEvent[]                 @relation("AuditActor")
+  sessions             Session[]
+  assignedRetailers    SalesmanRetailerAssignment[] @relation("SalesmanAssignments")
+  assignmentsCreated   SalesmanRetailerAssignment[] @relation("AssignmentCreator")
+  retailerLinkRequests RetailerLinkRequest[]         @relation("RetailerLinkRequester")
+  retailerLinkReviews  RetailerLinkRequest[]         @relation("RetailerLinkReviewer")
 
   @@index([retailerId])
   @@index([role])
+  @@index([status])
 }
 
 model Retailer {
@@ -65,9 +94,11 @@ model Retailer {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  users  User[]
-  prices RetailerProductPrice[]
-  orders Order[]
+  users               User[]
+  prices              RetailerProductPrice[]
+  orders              Order[]
+  salesmanAssignments SalesmanRetailerAssignment[]
+  linkRequests        RetailerLinkRequest[]
 
   @@index([shopName])
   @@index([phone])
@@ -180,6 +211,103 @@ model OrderItem {
 
   @@unique([orderId, productSku])
   @@index([productSku])
+}
+
+/// Admission lease for an OTP request. A reservation is created before the
+/// expensive scrypt hash, counts toward the rate-limit window immediately, and
+/// is completed only after the hashed challenge is persisted. Expired pending
+/// reservations become ABANDONED and still count for the window, so a crashed
+/// request cannot reset the limits.
+model OtpRequestReservation {
+  id            String               @id @default(cuid())
+  phone         String
+  requestIpHash String?
+  status        OtpReservationStatus @default(PENDING)
+  expiresAt     DateTime             @db.Timestamptz(3)
+  completedAt   DateTime?            @db.Timestamptz(3)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+
+  challenge OtpChallenge?
+
+  @@index([phone, createdAt])
+  @@index([requestIpHash, createdAt])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+}
+
+model OtpChallenge {
+  id             String    @id @default(cuid())
+  phone          String
+  codeHash       String
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  expiresAt      DateTime  @db.Timestamptz(3)
+  consumedAt     DateTime? @db.Timestamptz(3)
+  requestIpHash  String?
+  reservationId  String?   @unique
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+
+  reservation OtpRequestReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([phone, createdAt])
+  @@index([requestIpHash, createdAt])
+  @@index([expiresAt])
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique
+  userId        String
+  expiresAt     DateTime  @db.Timestamptz(3)
+  lastSeenAt    DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt     DateTime? @db.Timestamptz(3)
+  requestIpHash String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model SalesmanRetailerAssignment {
+  id           String   @id @default(cuid())
+  salesmanId   String
+  retailerId   String
+  assignedById String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  salesman   User     @relation("SalesmanAssignments", fields: [salesmanId], references: [id], onDelete: Cascade)
+  retailer   Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  assignedBy User?    @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([salesmanId, retailerId])
+  @@index([retailerId])
+  @@index([assignedById])
+}
+
+/// A phone-verified retailer account never links itself to an existing retailer
+/// record. The match is recorded as a pending request and an administrator must
+/// approve it explicitly. PostgreSQL enforces at most one PENDING request per
+/// user/retailer pair through a partial unique index in the migration; past
+/// decisions remain as history, so the pair itself is not globally unique.
+model RetailerLinkRequest {
+  id           String                    @id @default(cuid())
+  userId       String
+  retailerId   String
+  status       RetailerLinkRequestStatus @default(PENDING)
+  createdAt    DateTime                  @default(now()) @db.Timestamptz(3)
+  reviewedAt   DateTime?                 @db.Timestamptz(3)
+  reviewedById String?
+
+  user       User     @relation("RetailerLinkRequester", fields: [userId], references: [id], onDelete: Restrict)
+  retailer   Retailer @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  reviewedBy User?    @relation("RetailerLinkReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@index([userId, retailerId])
+  @@index([status, createdAt])
+  @@index([retailerId, status])
+  @@index([reviewedById])
 }
 
 model AuditEvent {
