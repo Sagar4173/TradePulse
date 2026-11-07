@@ -3,6 +3,7 @@ import type { Role } from "./types";
 export type NavigationIcon =
   | "dashboard"
   | "catalogue"
+  | "cart"
   | "orders"
   | "retailers"
   | "account"
@@ -34,6 +35,7 @@ const NAVIGATION: Record<Role, readonly NavigationItem[]> = {
   RETAILER: [
     DASHBOARD,
     { href: "/catalogue", label: "Product Catalogue", icon: "catalogue" },
+    { href: "/cart", label: "Cart", icon: "cart" },
     { href: "/orders", label: "My Orders", icon: "orders" },
     ACCOUNT,
   ],

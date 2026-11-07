@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="640" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4DB"/>
+      <stop offset="1" stop-color="#F3C969"/>
+    </linearGradient>
+    <linearGradient id="pack" x1="220" y1="100" x2="430" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#115E59"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="480" rx="28" fill="url(#bg)"/>
+  <circle cx="536" cy="86" r="74" fill="#FFFFFF" fill-opacity=".26"/>
+  <circle cx="92" cy="404" r="94" fill="#FFFFFF" fill-opacity=".22"/>
+  <rect x="196" y="92" width="248" height="300" rx="24" fill="url(#pack)"/>
+  <rect x="220" y="118" width="200" height="112" rx="14" fill="#FEF3C7"/>
+  <circle cx="272" cy="174" r="27" fill="#D97706"/>
+  <circle cx="272" cy="174" r="18" fill="#FBBF24"/>
+  <circle cx="324" cy="160" r="27" fill="#D97706"/>
+  <circle cx="324" cy="160" r="18" fill="#FBBF24"/>
+  <circle cx="372" cy="184" r="27" fill="#D97706"/>
+  <circle cx="372" cy="184" r="18" fill="#FBBF24"/>
+  <text x="320" y="278" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="28" font-weight="700">GLUCOSE</text>
+  <text x="320" y="312" text-anchor="middle" fill="#CCFBF1" font-family="Arial, sans-serif" font-size="22" font-weight="600">BISCUIT</text>
+  <text x="320" y="352" text-anchor="middle" fill="#99F6E4" font-family="Arial, sans-serif" font-size="18">75 g</text>
+</svg>

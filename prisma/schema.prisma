@@ -108,6 +108,9 @@ model Product {
   sku         String   @id
   name        String
   description String?
+  brand       String?  @db.VarChar(120)
+  category    String?  @db.VarChar(80)
+  imageUrl    String?  @db.VarChar(500)
   unitLabel   String
   dealerPrice Decimal  @db.Decimal(12, 2)
   gstRate     Decimal  @db.Decimal(5, 2)
@@ -121,6 +124,7 @@ model Product {
   orderItems OrderItem[]
 
   @@index([isActive, name])
+  @@index([isActive, category])
 }
 
 model RetailerProductPrice {

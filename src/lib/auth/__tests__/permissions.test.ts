@@ -102,7 +102,7 @@ describe("role navigation", () => {
   it("matches the milestone navigation for each role", () => {
     assert.deepEqual(
       getNavigationForRole("RETAILER").map((item) => item.href),
-      ["/dashboard", "/catalogue", "/orders", "/account"],
+      ["/dashboard", "/catalogue", "/cart", "/orders", "/account"],
     );
     assert.deepEqual(
       getNavigationForRole("SALESMAN").map((item) => item.href),

@@ -9,6 +9,7 @@ import {
   Menu,
   Package,
   ScrollText,
+  ShoppingCart,
   Store,
   UserCircle,
   Users,
@@ -36,6 +37,7 @@ import { cn } from "@/lib/utils";
 const NAV_ICONS = {
   dashboard: LayoutDashboard,
   catalogue: Package,
+  cart: ShoppingCart,
   orders: ClipboardList,
   retailers: Store,
   account: UserCircle,
@@ -55,9 +57,11 @@ export type ShellUser = {
 
 function NavigationLinks({
   role,
+  cartItemCount = 0,
   onNavigate,
 }: {
   role: Role;
+  cartItemCount?: number;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -66,6 +70,7 @@ function NavigationLinks({
     <nav aria-label="Main navigation" className="mt-6 space-y-1">
       {getNavigationForRole(role).map((item) => {
         const Icon = NAV_ICONS[item.icon];
+        const isCart = item.href === "/cart";
         const isActive =
           pathname === item.href ||
           (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
@@ -76,6 +81,11 @@ function NavigationLinks({
             href={item.href}
             onClick={onNavigate}
             aria-current={isActive ? "page" : undefined}
+            aria-label={
+              isCart && cartItemCount > 0
+                ? `${item.label}, ${cartItemCount} items`
+                : undefined
+            }
             className={cn(
               "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
               isActive
@@ -85,6 +95,14 @@ function NavigationLinks({
           >
             <Icon aria-hidden="true" className="size-4.5 shrink-0" />
             <span className="truncate">{item.label}</span>
+            {isCart && cartItemCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none text-primary-foreground"
+              >
+                {cartItemCount > 99 ? "99+" : cartItemCount}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -124,9 +142,11 @@ const FOCUSABLE_SELECTOR =
 
 export function AppShell({
   user,
+  cartItemCount = 0,
   children,
 }: {
   user: ShellUser;
+  cartItemCount?: number;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -212,7 +232,7 @@ export function AppShell({
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
-          <NavigationLinks role={user.role} />
+          <NavigationLinks role={user.role} cartItemCount={cartItemCount} />
           <div className="mt-auto pt-6">
             <UserCard user={user} />
           </div>
@@ -307,6 +327,7 @@ export function AppShell({
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               <NavigationLinks
                 role={user.role}
+                cartItemCount={cartItemCount}
                 onNavigate={() => setMobileOpen(false)}
               />
               <div className="mt-auto pt-6">

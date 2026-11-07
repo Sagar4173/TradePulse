@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="640" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <linearGradient id="pack" x1="214" y1="96" x2="430" y2="396" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#1E3A8A"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="480" rx="28" fill="url(#bg)"/>
+  <circle cx="104" cy="88" r="68" fill="#FFFFFF" fill-opacity=".35"/>
+  <circle cx="548" cy="402" r="102" fill="#FFFFFF" fill-opacity=".25"/>
+  <path d="M214 128 320 88l106 40v238c0 18-14 32-32 32H246c-18 0-32-14-32-32V128Z" fill="url(#pack)"/>
+  <path d="M214 128 320 168l106-40" fill="#BFDBFE" fill-opacity=".35"/>
+  <rect x="248" y="186" width="144" height="82" rx="12" fill="#DBEAFE"/>
+  <path d="M282 244c8-22 22-36 38-36s30 14 38 36" stroke="#2563EB" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="286" cy="206" r="9" fill="#60A5FA"/>
+  <circle cx="354" cy="206" r="9" fill="#60A5FA"/>
+  <text x="320" y="310" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="26" font-weight="700">DETERGENT</text>
+  <text x="320" y="344" text-anchor="middle" fill="#DBEAFE" font-family="Arial, sans-serif" font-size="22" font-weight="600">POWDER</text>
+  <text x="320" y="378" text-anchor="middle" fill="#BFDBFE" font-family="Arial, sans-serif" font-size="18">1 kg</text>
+</svg>
