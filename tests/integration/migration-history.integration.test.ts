@@ -81,7 +81,10 @@ describe("retailer link-request migration history", () => {
 
     await seedPreMigrationFourData(client);
 
-    const upgraded = await applyMigrations(client, { after: MIGRATION_3 });
+    const upgraded = await applyMigrations(client, {
+      after: MIGRATION_3,
+      through: MIGRATION_4,
+    });
     assert.deepEqual(upgraded, [MIGRATION_4]);
 
     const challenges = await client.query<{
@@ -216,7 +219,10 @@ describe("retailer link-request migration history", () => {
       "n",
     );
 
-    const reApplied = await applyMigrations(client, { after: MIGRATION_3 });
+    const reApplied = await applyMigrations(client, {
+      after: MIGRATION_3,
+      through: MIGRATION_4,
+    });
     assert.deepEqual(reApplied, [MIGRATION_4]);
 
     const restoredActions = await foreignKeyDeleteActions(client);

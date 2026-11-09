@@ -2,6 +2,7 @@ import type { SchemeCandidate } from "./engine";
 
 export type SchemeRow = {
   id: string;
+  name?: string;
   type: string;
   isActive: boolean;
   startsAt: Date | null;
@@ -14,6 +15,7 @@ export type SchemeRow = {
 export function toSchemeCandidate(row: SchemeRow): SchemeCandidate {
   return {
     id: row.id,
+    name: row.name,
     type: row.type,
     isActive: row.isActive,
     startsAt: row.startsAt,

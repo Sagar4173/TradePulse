@@ -41,6 +41,8 @@ export type CartLineResult = {
   stockStatus: StockStatus;
   availableCases: number | null;
   scheme: AppliedScheme | null;
+  schemeName: string | null;
+  schemeDiscountPercentBasisPoints: bigint | null;
   subtotalPaise: bigint;
   discountPaise: bigint;
   taxablePaise: bigint;

@@ -125,6 +125,21 @@ function groupIndianDigits(digits: string): string {
 }
 
 /**
+ * Converts integer paise to an exact two-decimal decimal string suitable for a
+ * PostgreSQL numeric column, e.g. `950n` → `"9.50"`.
+ */
+export function paiseToDecimalString(paise: bigint): string {
+  if (paise < 0n) {
+    throw new MoneyValueError("Paise amount cannot be negative.");
+  }
+
+  const rupees = paise / 100n;
+  const fraction = (paise % 100n).toString().padStart(2, "0");
+
+  return `${rupees}.${fraction}`;
+}
+
+/**
  * Formats integer paise as Indian rupees, e.g. `11210n` → `"₹112.10"`.
  */
 export function formatPaise(paise: bigint): string {

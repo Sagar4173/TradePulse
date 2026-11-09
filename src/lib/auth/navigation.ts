@@ -55,6 +55,7 @@ const NAVIGATION: Record<Role, readonly NavigationItem[]> = {
     DASHBOARD,
     { href: "/users", label: "Users", icon: "users" },
     { href: "/retailers", label: "Retailers", icon: "retailers" },
+    { href: "/orders", label: "Order Management", icon: "orders" },
     { href: "/products", label: "Products", icon: "products" },
     { href: "/inventory", label: "Inventory", icon: "inventory" },
     { href: "/schemes", label: "Schemes", icon: "schemes" },

@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { getPrismaClient } from "@/lib/db";
 import { calculateStock } from "@/lib/inventory/stock";
 import { parseMoneyToPaise } from "@/lib/money";
@@ -8,6 +9,7 @@ import type { CartPriceInput } from "./types";
 
 const schemeSelect = {
   id: true,
+  name: true,
   type: true,
   isActive: true,
   startsAt: true,
@@ -25,12 +27,13 @@ const schemeSelect = {
 export async function fetchCartProducts(
   retailerId: string,
   skus: readonly string[],
+  client: PrismaClient | Prisma.TransactionClient = getPrismaClient(),
 ): Promise<CartPriceInput[]> {
   if (skus.length === 0) {
     return [];
   }
 
-  const rows = await getPrismaClient().product.findMany({
+  const rows = await client.product.findMany({
     where: { sku: { in: [...skus] }, isActive: true },
     select: {
       sku: true,

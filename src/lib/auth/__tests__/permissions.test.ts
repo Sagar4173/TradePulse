@@ -20,7 +20,10 @@ describe("role permissions", () => {
     assert.equal(hasPermission(role, PERMISSIONS.DASHBOARD_VIEW), true);
     assert.equal(hasPermission(role, PERMISSIONS.CATALOGUE_VIEW), true);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_VIEW_OWN), true);
+    assert.equal(hasPermission(role, PERMISSIONS.ORDERS_SUBMIT_OWN), true);
+    assert.equal(hasPermission(role, PERMISSIONS.ORDERS_CANCEL_OWN), true);
     assert.equal(hasPermission(role, PERMISSIONS.CREDIT_VIEW_OWN), true);
+    assert.equal(hasPermission(role, PERMISSIONS.ORDERS_MANAGE), false);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_VIEW_ALL), false);
     assert.equal(hasPermission(role, PERMISSIONS.RETAILERS_VIEW_ALL), false);
     assert.equal(hasPermission(role, PERMISSIONS.USERS_VIEW), false);
@@ -29,12 +32,16 @@ describe("role permissions", () => {
   it("limits salesmen to assigned retailer scope", () => {
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_VIEW_ASSIGNED), true);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.RETAILERS_VIEW_ASSIGNED), true);
+    assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_MANAGE), false);
+    assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_SUBMIT_OWN), false);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_VIEW_ALL), false);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.USERS_VIEW), false);
   });
 
   it("gives order desk explicit all-order and retailer visibility but no user management", () => {
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_VIEW_ALL), true);
+    assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_MANAGE), true);
+    assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_SUBMIT_OWN), false);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.RETAILERS_VIEW_ALL), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.CREDIT_VIEW_ALL), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.USERS_VIEW), false);
@@ -118,6 +125,7 @@ describe("role navigation", () => {
         "/dashboard",
         "/users",
         "/retailers",
+        "/orders",
         "/products",
         "/inventory",
         "/schemes",

@@ -27,6 +27,7 @@ type DecimalLike = { toString(): string } | string;
 
 export type SchemeCandidate = {
   id: string;
+  name?: string;
   type: SchemeType | string;
   isActive: boolean;
   startsAt: Date | null;

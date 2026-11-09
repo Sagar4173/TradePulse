@@ -6,6 +6,7 @@ import {
   formatBasisPointsPercent,
   formatPaise,
   multiplyByQuantity,
+  paiseToDecimalString,
   parseMoneyToPaise,
   parsePercentToBasisPoints,
   percentageOf,
@@ -80,6 +81,20 @@ describe("multiplyByQuantity", () => {
   it("rejects non-integer and negative quantities", () => {
     assert.throws(() => multiplyByQuantity(950n, -1), MoneyValueError);
     assert.throws(() => multiplyByQuantity(950n, 1.5), MoneyValueError);
+  });
+});
+
+describe("paiseToDecimalString", () => {
+  it("converts integer paise to an exact two-decimal string", () => {
+    assert.equal(paiseToDecimalString(0n), "0.00");
+    assert.equal(paiseToDecimalString(5n), "0.05");
+    assert.equal(paiseToDecimalString(950n), "9.50");
+    assert.equal(paiseToDecimalString(100_000n), "1000.00");
+    assert.equal(paiseToDecimalString(12_345_678n), "123456.78");
+  });
+
+  it("rejects negative values", () => {
+    assert.throws(() => paiseToDecimalString(-1n), MoneyValueError);
   });
 });
 

@@ -8,6 +8,7 @@ import type { CatalogueCandidate, CatalogueDetails } from "./types";
 
 const schemeSelect = {
   id: true,
+  name: true,
   type: true,
   isActive: true,
   startsAt: true,

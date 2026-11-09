@@ -6,6 +6,7 @@ import {
   Store,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
 import { OrderStatusBadge } from "@/components/order-status-badge";
@@ -30,6 +31,7 @@ import {
 
 type RecentOrder = {
   id: string;
+  orderNumber: string;
   status: string;
   total: { toString(): string } | string | number;
   createdAt: Date;
@@ -56,8 +58,7 @@ function RecentOrders({
       <CardContent>
         {orders.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            Order activity will appear here once orders are created in a later
-            milestone.
+            Orders will appear here as retailers submit them.
           </div>
         ) : (
           <ul className="divide-y divide-border">
@@ -68,9 +69,12 @@ function RecentOrders({
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {order.id.slice(-8).toUpperCase()}
-                    </span>
+                    <Link
+                      href={`/orders/${order.id}`}
+                      className="font-mono text-xs font-medium text-primary hover:underline"
+                    >
+                      {order.orderNumber}
+                    </Link>
                     <OrderStatusBadge status={order.status} />
                   </div>
                   <p className="mt-1 truncate text-sm">
@@ -119,22 +123,44 @@ async function RetailerDashboard({
   }
 
   const prisma = getPrismaClient();
-  const [retailer, activeProducts, orderCount, recentOrders] = await Promise.all(
-    [
-      prisma.retailer.findUnique({
-        where: { id: retailerId },
-        select: { shopName: true, creditLimit: true },
-      }),
-      prisma.product.count({ where: { isActive: true } }),
-      prisma.order.count({ where: { retailerId } }),
-      prisma.order.findMany({
-        where: { retailerId },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { id: true, status: true, total: true, createdAt: true },
-      }),
-    ],
-  );
+  const [
+    retailer,
+    activeProducts,
+    orderCount,
+    awaitingCount,
+    deliveredCount,
+    recentOrders,
+  ] = await Promise.all([
+    prisma.retailer.findUnique({
+      where: { id: retailerId },
+      select: { shopName: true, creditLimit: true },
+    }),
+    prisma.product.count({ where: { isActive: true } }),
+    prisma.order.count({ where: { retailerId } }),
+    prisma.order.count({
+      where: {
+        retailerId,
+        status: {
+          in: [OrderStatus.PENDING_REVIEW, OrderStatus.ON_CREDIT_HOLD],
+        },
+      },
+    }),
+    prisma.order.count({
+      where: { retailerId, status: OrderStatus.DELIVERED },
+    }),
+    prisma.order.findMany({
+      where: { retailerId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        total: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -168,6 +194,18 @@ async function RetailerDashboard({
           detail="Orders placed by your store"
           icon={ClipboardList}
         />
+        <StatCard
+          label="Awaiting action"
+          value={String(awaitingCount)}
+          detail="Pending review or on credit hold"
+          icon={ClipboardList}
+        />
+        <StatCard
+          label="Delivered"
+          value={String(deliveredCount)}
+          detail="Orders marked delivered"
+          icon={Store}
+        />
       </div>
       <RecentOrders orders={recentOrders} />
     </div>
@@ -181,9 +219,19 @@ async function SalesmanDashboard({ userId }: { userId: string }) {
     select: { retailerId: true },
   });
   const retailerIds = assignments.map((assignment) => assignment.retailerId);
-  const [orderCount, recentOrders] = await Promise.all([
+  const [orderCount, awaitingCount, recentOrders] = await Promise.all([
     retailerIds.length > 0
       ? prisma.order.count({ where: { retailerId: { in: retailerIds } } })
+      : Promise.resolve(0),
+    retailerIds.length > 0
+      ? prisma.order.count({
+          where: {
+            retailerId: { in: retailerIds },
+            status: {
+              in: [OrderStatus.PENDING_REVIEW, OrderStatus.ON_CREDIT_HOLD],
+            },
+          },
+        })
       : Promise.resolve(0),
     retailerIds.length > 0
       ? prisma.order.findMany({
@@ -192,6 +240,7 @@ async function SalesmanDashboard({ userId }: { userId: string }) {
           take: 5,
           select: {
             id: true,
+            orderNumber: true,
             status: true,
             total: true,
             createdAt: true,
@@ -222,6 +271,12 @@ async function SalesmanDashboard({ userId }: { userId: string }) {
           icon={ClipboardList}
         />
         <StatCard
+          label="Awaiting action"
+          value={String(awaitingCount)}
+          detail="Pending review or on credit hold"
+          icon={ClipboardList}
+        />
+        <StatCard
           label="Access model"
           value="Assigned only"
           detail="Retailers outside your assignment are not accessible"
@@ -243,23 +298,30 @@ async function SalesmanDashboard({ userId }: { userId: string }) {
 
 async function OrderDeskDashboard() {
   const prisma = getPrismaClient();
-  const [retailerCount, pendingCount, orderCount, recentOrders] =
-    await Promise.all([
-      prisma.retailer.count(),
-      prisma.order.count({ where: { status: OrderStatus.PENDING_REVIEW } }),
-      prisma.order.count(),
-      prisma.order.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          status: true,
-          total: true,
-          createdAt: true,
-          retailer: { select: { shopName: true } },
-        },
-      }),
-    ]);
+  const [
+    pendingCount,
+    creditHoldCount,
+    readyCount,
+    orderCount,
+    recentOrders,
+  ] = await Promise.all([
+    prisma.order.count({ where: { status: OrderStatus.PENDING_REVIEW } }),
+    prisma.order.count({ where: { status: OrderStatus.ON_CREDIT_HOLD } }),
+    prisma.order.count({ where: { status: OrderStatus.READY_FOR_DISPATCH } }),
+    prisma.order.count(),
+    prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        total: true,
+        createdAt: true,
+        retailer: { select: { shopName: true } },
+      },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -270,28 +332,28 @@ async function OrderDeskDashboard() {
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Retailers"
-          value={String(retailerCount)}
-          detail="Retailer accounts in the network"
-          icon={Store}
+          label="Pending review"
+          value={String(pendingCount)}
+          detail="Waiting for an Order Desk decision"
+          icon={ClipboardList}
         />
         <StatCard
-          label="Awaiting review"
-          value={String(pendingCount)}
-          detail="Orders pending order-desk review"
-          icon={ClipboardList}
+          label="On credit hold"
+          value={String(creditHoldCount)}
+          detail="No stock reserved until credit is rechecked"
+          icon={IndianRupee}
+        />
+        <StatCard
+          label="Ready for dispatch"
+          value={String(readyCount)}
+          detail="Reserved stock awaiting dispatch"
+          icon={Store}
         />
         <StatCard
           label="All orders"
           value={String(orderCount)}
           detail="Visible to Order Desk and Admin"
           icon={ScrollText}
-        />
-        <StatCard
-          label="Credit visibility"
-          value="Network"
-          detail="Retailer credit data is available on the retailers page"
-          icon={IndianRupee}
         />
       </div>
       <RecentOrders orders={recentOrders} showRetailer />
@@ -301,25 +363,34 @@ async function OrderDeskDashboard() {
 
 async function AdminDashboard() {
   const prisma = getPrismaClient();
-  const [userCount, retailerCount, productCount, pendingCount, auditEvents] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.retailer.count(),
-      prisma.product.count({ where: { isActive: true } }),
-      prisma.order.count({ where: { status: OrderStatus.PENDING_REVIEW } }),
-      prisma.auditEvent.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 6,
-        select: {
-          id: true,
-          eventType: true,
-          entityType: true,
-          entityId: true,
-          createdAt: true,
-          actor: { select: { name: true } },
-        },
-      }),
-    ]);
+  const [
+    userCount,
+    retailerCount,
+    productCount,
+    pendingCount,
+    creditHoldCount,
+    readyCount,
+    auditEvents,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.retailer.count(),
+    prisma.product.count({ where: { isActive: true } }),
+    prisma.order.count({ where: { status: OrderStatus.PENDING_REVIEW } }),
+    prisma.order.count({ where: { status: OrderStatus.ON_CREDIT_HOLD } }),
+    prisma.order.count({ where: { status: OrderStatus.READY_FOR_DISPATCH } }),
+    prisma.auditEvent.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        eventType: true,
+        entityType: true,
+        entityId: true,
+        createdAt: true,
+        actor: { select: { name: true } },
+      },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -328,7 +399,7 @@ async function AdminDashboard() {
         title="Dashboard"
         description="Central operational visibility, user access, and audit activity for the TradePulse network."
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Users"
           value={String(userCount)}
@@ -348,10 +419,22 @@ async function AdminDashboard() {
           icon={Boxes}
         />
         <StatCard
-          label="Awaiting review"
+          label="Pending review"
           value={String(pendingCount)}
-          detail="Orders pending order-desk review"
+          detail="Orders awaiting an Order Desk decision"
           icon={ClipboardList}
+        />
+        <StatCard
+          label="On credit hold"
+          value={String(creditHoldCount)}
+          detail="Held orders with no stock reservation"
+          icon={IndianRupee}
+        />
+        <StatCard
+          label="Ready for dispatch"
+          value={String(readyCount)}
+          detail="Reserved stock awaiting dispatch"
+          icon={ScrollText}
         />
       </div>
       <Card>

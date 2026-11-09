@@ -125,6 +125,27 @@ function calculateLine(
   const fulfilledQuantity = paidQuantity + freeQuantity;
   const priceAndTaxAvailable =
     unitPricePaise !== null && gstRateBasisPoints !== null;
+  const appliedSchemeCandidate = scheme
+    ? product.schemes.find(
+        (candidate) => candidate.id === scheme.schemeId,
+      ) ?? null
+    : null;
+  let schemeDiscountPercentBasisPoints: bigint | null = null;
+
+  if (
+    appliedSchemeCandidate?.type === "PERCENTAGE_DISCOUNT" &&
+    appliedSchemeCandidate.discountPercent !== null
+  ) {
+    try {
+      schemeDiscountPercentBasisPoints = parsePercentToBasisPoints(
+        appliedSchemeCandidate.discountPercent,
+      );
+    } catch (error) {
+      if (!(error instanceof MoneyValueError)) {
+        throw error;
+      }
+    }
+  }
 
   let subtotalPaise = 0n;
   let discountPaise = 0n;
@@ -167,6 +188,8 @@ function calculateLine(
     stockStatus: product.stock.status,
     availableCases,
     scheme,
+    schemeName: appliedSchemeCandidate?.name ?? null,
+    schemeDiscountPercentBasisPoints,
     subtotalPaise,
     discountPaise,
     taxablePaise,

@@ -29,10 +29,32 @@ enum OrderStatus {
   DRAFT
   PENDING_REVIEW
   APPROVED
+  PROCESSING
+  READY_FOR_DISPATCH
+  DISPATCHED
+  DELIVERED
   ON_CREDIT_HOLD
   REJECTED
   FULFILLED
   CANCELLED
+}
+
+enum CreditCheckStatus {
+  NOT_CHECKED
+  PASSED
+  FAILED
+}
+
+/// Stock lifecycle for an order. NONE means no reservation exists (for example
+/// an order placed on credit hold). RESERVED means paid and free cases are held
+/// in Inventory.reservedCases. RELEASED means a previous reservation was
+/// returned exactly once. DEDUCTED means dispatch removed the same cases from
+/// both stockCases and reservedCases.
+enum StockState {
+  NONE
+  RESERVED
+  RELEASED
+  DEDUCTED
 }
 
 enum OrderSource {
@@ -77,8 +99,8 @@ model User {
   sessions             Session[]
   assignedRetailers    SalesmanRetailerAssignment[] @relation("SalesmanAssignments")
   assignmentsCreated   SalesmanRetailerAssignment[] @relation("AssignmentCreator")
-  retailerLinkRequests RetailerLinkRequest[]         @relation("RetailerLinkRequester")
-  retailerLinkReviews  RetailerLinkRequest[]         @relation("RetailerLinkReviewer")
+  retailerLinkRequests RetailerLinkRequest[]        @relation("RetailerLinkRequester")
+  retailerLinkReviews  RetailerLinkRequest[]        @relation("RetailerLinkReviewer")
 
   @@index([retailerId])
   @@index([role])
@@ -174,41 +196,68 @@ model Scheme {
 }
 
 model Order {
-  id          String      @id @default(cuid())
-  retailerId  String
-  createdById String
-  status      OrderStatus @default(DRAFT)
-  subtotal    Decimal     @default(0) @db.Decimal(14, 2)
-  discount    Decimal     @default(0) @db.Decimal(14, 2)
-  gstAmount   Decimal     @default(0) @db.Decimal(14, 2)
-  total       Decimal     @default(0) @db.Decimal(14, 2)
-  source      OrderSource
-  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+  id                        String            @id @default(cuid())
+  /// Human-readable unique number allocated from order_number_seq inside the
+  /// order-creation transaction: TP-YYYYMMDD-###### (Asia/Kolkata).
+  orderNumber               String            @unique @db.VarChar(32)
+  retailerId                String
+  createdById               String
+  /// Scoped duplicate-submission guard. Nullable so historical orders and
+  /// non-checkout orders do not require a key.
+  idempotencyKey            String?           @db.VarChar(128)
+  status                    OrderStatus       @default(DRAFT)
+  /// Credit check outcome for this order. ON_CREDIT_HOLD orders have FAILED.
+  creditCheckStatus         CreditCheckStatus @default(NOT_CHECKED)
+  /// Retailer limit at the time of the check.
+  creditLimitSnapshot       Decimal?          @db.Decimal(14, 2)
+  /// Projected open-order exposure including this order at check time.
+  creditOutstandingSnapshot Decimal?          @db.Decimal(14, 2)
+  creditHoldReason          String?           @db.VarChar(500)
+  creditCheckedAt           DateTime?         @db.Timestamptz(3)
+  stockState                StockState        @default(NONE)
+  statusReason              String?           @db.VarChar(500)
+  subtotal                  Decimal           @default(0) @db.Decimal(14, 2)
+  discount                  Decimal           @default(0) @db.Decimal(14, 2)
+  gstAmount                 Decimal           @default(0) @db.Decimal(14, 2)
+  total                     Decimal           @default(0) @db.Decimal(14, 2)
+  source                    OrderSource
+  createdAt                 DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime          @updatedAt @db.Timestamptz(3)
 
   retailer  Retailer    @relation(fields: [retailerId], references: [id], onDelete: Restrict)
   createdBy User        @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   items     OrderItem[]
 
+  @@unique([retailerId, idempotencyKey])
   @@index([retailerId, createdAt])
   @@index([createdById, createdAt])
   @@index([status, createdAt])
+  @@index([status, stockState])
+  @@index([retailerId, status, createdAt])
   @@index([createdAt])
 }
 
 model OrderItem {
-  id          String   @id @default(cuid())
-  orderId     String
-  productSku  String
-  productName String
-  unitLabel   String
-  quantity    Int
-  unitPrice   Decimal  @db.Decimal(12, 2)
-  discount    Decimal  @default(0) @db.Decimal(12, 2)
-  gstRate     Decimal  @db.Decimal(5, 2)
-  gstAmount   Decimal  @default(0) @db.Decimal(12, 2)
-  lineTotal   Decimal  @db.Decimal(14, 2)
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  id                    String      @id @default(cuid())
+  orderId               String
+  productSku            String
+  productName           String
+  unitLabel             String
+  /// Paid quantity. Free scheme units are stored separately.
+  quantity              Int
+  freeQuantity          Int         @default(0)
+  /// Scheme snapshots remain meaningful even if the scheme is later edited or
+  /// removed. No foreign key is used because schemes are configuration.
+  schemeId              String?     @db.VarChar(100)
+  schemeName            String?     @db.VarChar(160)
+  schemeType            SchemeType?
+  schemeDiscountPercent Decimal?    @db.Decimal(5, 2)
+  unitPrice             Decimal     @db.Decimal(12, 2)
+  discount              Decimal     @default(0) @db.Decimal(12, 2)
+  gstRate               Decimal     @db.Decimal(5, 2)
+  gstAmount             Decimal     @default(0) @db.Decimal(12, 2)
+  lineTotal             Decimal     @db.Decimal(14, 2)
+  createdAt             DateTime    @default(now()) @db.Timestamptz(3)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productSku], references: [sku], onDelete: Restrict)
@@ -240,16 +289,16 @@ model OtpRequestReservation {
 }
 
 model OtpChallenge {
-  id             String    @id @default(cuid())
-  phone          String
-  codeHash       String
-  attempts       Int       @default(0)
-  maxAttempts    Int       @default(5)
-  expiresAt      DateTime  @db.Timestamptz(3)
-  consumedAt     DateTime? @db.Timestamptz(3)
-  requestIpHash  String?
-  reservationId  String?   @unique
-  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  id            String    @id @default(cuid())
+  phone         String
+  codeHash      String
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(5)
+  expiresAt     DateTime  @db.Timestamptz(3)
+  consumedAt    DateTime? @db.Timestamptz(3)
+  requestIpHash String?
+  reservationId String?   @unique
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
 
   reservation OtpRequestReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
 

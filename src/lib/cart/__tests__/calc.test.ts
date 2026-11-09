@@ -9,6 +9,7 @@ const NOW = new Date("2026-11-07T12:00:00.000Z");
 
 const BUY_10_GET_1: SchemeCandidate = {
   id: "scheme_bs_075_buy_10_get_1",
+  name: "Buy 10 Get 1",
   type: "BUY_X_GET_Y",
   isActive: true,
   startsAt: null,
@@ -20,6 +21,7 @@ const BUY_10_GET_1: SchemeCandidate = {
 
 const THREE_PERCENT_5_PLUS: SchemeCandidate = {
   id: "scheme_dt_1kg_3pct_5plus",
+  name: "3% off 5+ cases",
   type: "PERCENTAGE_DISCOUNT",
   isActive: true,
   startsAt: null,
@@ -108,6 +110,8 @@ describe("calculateCart: approved scheme examples", () => {
     assert.equal(line.freeQuantity, 1);
     assert.equal(line.fulfilledQuantity, 11);
     assert.equal(line.scheme?.schemeId, "scheme_bs_075_buy_10_get_1");
+    assert.equal(line.schemeName, "Buy 10 Get 1");
+    assert.equal(line.schemeDiscountPercentBasisPoints, null);
     assert.equal(line.subtotalPaise, 10_450n);
     assert.equal(line.discountPaise, 950n);
     assert.equal(line.taxablePaise, 9_500n);
@@ -146,6 +150,8 @@ describe("calculateCart: approved scheme examples", () => {
 
     assert.equal(line.paidQuantity, 5);
     assert.equal(line.freeQuantity, 0);
+    assert.equal(line.schemeName, "3% off 5+ cases");
+    assert.equal(line.schemeDiscountPercentBasisPoints, 300n);
     assert.equal(line.subtotalPaise, 56_000n);
     assert.equal(line.discountPaise, 1_680n);
     assert.equal(line.taxablePaise, 54_320n);
