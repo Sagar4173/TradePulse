@@ -126,7 +126,7 @@ No production seed was run. Production contains the existing demo catalogue only
 | `/orders/export` | HTTP `307` → `/login?next=%2Forders%2Fexport` |
 | `/ai-capture` | HTTP `307` → `/login?next=%2Fai-capture` |
 | `/api/health` | HTTP `200`; `status: ok`; application `up`; database `up` |
-| Browser console | No errors or warnings on the live landing and login pages |
+| Browser console | No console errors; one transient CSS preload warning observed once on `/login` |
 | Desktop layout | Verified at 1440×1000 |
 | Mobile layout | Verified at 390×844 after the login overflow fix |
 
