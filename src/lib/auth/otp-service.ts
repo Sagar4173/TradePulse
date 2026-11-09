@@ -153,7 +153,11 @@ export async function requestOtp(
   let devCode: string | undefined;
 
   try {
-    await provider.send({ phone: input.phone, code });
+    await provider.send({
+      phone: input.phone,
+      code,
+      ttlSeconds: config.otpTtlSeconds,
+    });
 
     // The provider contract cannot return a code. Only the explicit local
     // development provider may reveal it, and only when the runtime config

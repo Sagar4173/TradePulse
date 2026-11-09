@@ -176,12 +176,14 @@ The provisioning script requires an allowlisted host and matching target fingerp
 | `TRADEPULSE_PRODUCTION_TARGET_HOSTS` | No | Optional denylist of known production hosts. |
 | `TRADEPULSE_TEST_DATABASE_ADMIN_URL` | Integration tests only | Explicit disposable PostgreSQL admin URL; Neon and production targets are rejected. |
 | `AUTH_BOOTSTRAP_ADMIN_ENABLED` | CLI only | Required by the one-time first-administrator bootstrap. |
-| `AUTH_SMS_PROVIDER` | Not implemented | Reserved provider selector name. |
-| `AUTH_SMS_API_URL` | Not implemented | Reserved provider endpoint name. |
-| `AUTH_SMS_API_KEY` | Not implemented | Reserved provider credential name. |
-| `AUTH_SMS_SENDER_ID` | Not implemented | Reserved sender ID name. |
+| `AUTH_SMS_PROVIDER` | SMS delivery | `msg91`, `twilio`, or `exotel`; production fails closed when unset or incomplete. See [SMS authentication operations](docs/sms-authentication.md). |
+| `AUTH_SMS_TIMEOUT_MS` | No | Per-attempt provider timeout; default `8000`, bounded to `1000–20000`. |
+| `AUTH_SMS_MESSAGE_TEMPLATE` | No | Message body for Twilio and Exotel; must contain `{code}` and match the approved DLT template. MSG91 uses its dashboard template. |
+| `AUTH_SMS_MSG91_AUTH_KEY`, `AUTH_SMS_MSG91_TEMPLATE_ID` | MSG91 | Auth key and dashboard OTP template identifier. |
+| `AUTH_SMS_TWILIO_ACCOUNT_SID`, `AUTH_SMS_TWILIO_AUTH_TOKEN`, and one of `AUTH_SMS_TWILIO_FROM_NUMBER` / `AUTH_SMS_TWILIO_MESSAGING_SERVICE_SID` | Twilio | Messages API sender configuration. |
+| `AUTH_SMS_EXOTEL_ACCOUNT_SID`, `AUTH_SMS_EXOTEL_API_KEY`, `AUTH_SMS_EXOTEL_API_TOKEN`, `AUTH_SMS_EXOTEL_SENDER_ID`, `AUTH_SMS_EXOTEL_DLT_ENTITY_ID`, `AUTH_SMS_EXOTEL_DLT_TEMPLATE_ID` | Exotel | Account, sender, and DLT-approved template identifiers. |
 
-No SMS adapter is implemented. The four `AUTH_SMS_*` names are placeholders for a future provider and have no effect today.
+Production requires one complete SMS provider configuration; otherwise OTP requests fail closed. TradePulse always generates, hashes, and verifies the code locally, and the provider only delivers it. Run `npm run auth:sms-check` in the target environment after configuration; it prints no secret values. Full provider and DLT setup is documented in [SMS authentication operations](docs/sms-authentication.md).
 
 ## Scripts
 
@@ -245,9 +247,9 @@ A healthy deployment returns HTTP `200` from `/` and `/api/health`, with `checks
 
 ## Authentication status
 
-The production OTP provider is intentionally fail-closed because no SMS vendor adapter or credentials are configured. Production never returns, logs, or exposes a development OTP, and no authentication bypass or universal password exists. The production database currently has no user accounts.
+The production OTP provider is intentionally fail-closed because no SMS vendor credentials are configured. Production never returns, logs, or exposes a development OTP, and no authentication bypass or universal password exists. The production database currently has no user accounts.
 
-Until a real SMS provider is integrated and configured, the application is demonstrable through:
+Until a real SMS provider is configured with approved DLT templates, the application is demonstrable through:
 
 - the public landing page, `/login`, and `/api/health`;
 - locally, against a disposable non-production database, using the guarded development OTP flow.
@@ -290,12 +292,13 @@ npm run test:integration
 - All database access uses Prisma's parameterized query layer.
 - The health endpoint does not expose driver errors or connection strings.
 - CSV export neutralizes formula-injection prefixes and never mutates orders.
-- Production OTP fails closed until a real SMS adapter is implemented, configured, and tested.
+- Production OTP fails closed until a real SMS provider is configured and verified.
+- SMS provider requests reject redirects, never log OTPs or credentials, and retry only a 429 response with a short, parseable `Retry-After`.
 - Use a least-privilege runtime role for `DATABASE_URL` where possible and reserve the database owner role for migrations.
 
 ## Limitations
 
-1. **Production sign-in is unavailable** until a real SMS provider adapter and credentials are configured. No bypass exists.
+1. **Production sign-in is unavailable** until a real SMS provider is configured with credentials and any required DLT approval. No bypass exists.
 2. **No production user or order data** is seeded. The production database contains the demo catalogue only (one retailer, three products, schemes, prices, and inventory).
 3. **AI capture is deterministic and text-only.** It does not use an external AI model and does not process images or voice notes. Hindi is handled through transliteration/normalization and catalogue matching, not a language model.
 4. **Tally export is CSV, not native Tally XML.** The format is Tally-compatible but has not been validated against a specific Tally version or import template.

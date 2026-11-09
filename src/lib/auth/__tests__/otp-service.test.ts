@@ -30,7 +30,7 @@ function setup(options?: {
     retailerPhones: options?.retailerPhones,
     linkRequests: options?.linkRequests,
   });
-  const sent: Array<{ phone: string; code: string }> = [];
+  const sent: Array<{ phone: string; code: string; ttlSeconds: number }> = [];
   const provider: OtpProvider =
     options?.provider ??
     {
@@ -99,9 +99,34 @@ describe("requestOtp", () => {
     assert.equal(result.devCode, "123456");
     assert.equal(result.expiresAt.getTime(), START.getTime() + 300_000);
     assert.equal(sent.length, 1);
-    assert.deepEqual(sent[0], { phone: PHONE, code: "123456" });
+    assert.deepEqual(sent[0], {
+      phone: PHONE,
+      code: "123456",
+      ttlSeconds: 300,
+    });
     assert.equal(store.getChallenges()[0].codeHash, "otp-hash:123456");
     assert.notEqual(store.getChallenges()[0].codeHash, "123456");
+  });
+
+  it("rejects an invalid phone before admission or delivery", async () => {
+    const { deps, store, sent } = setup();
+
+    await expectAuthError(
+      requestOtp(deps, { phone: "+14155552671", ipHash: "ip-hash" }),
+      "INVALID_PHONE",
+    );
+
+    assert.equal(store.getReservations().length, 0);
+    assert.equal(store.getChallenges().length, 0);
+    assert.equal(sent.length, 0);
+  });
+
+  it("passes the configured challenge TTL to the delivery provider", async () => {
+    const { deps, sent } = setup({ config: { otpTtlSeconds: 120 } });
+
+    await requestOtp(deps, { phone: PHONE, ipHash: "ip-hash" });
+
+    assert.equal(sent[0]?.ttlSeconds, 120);
   });
 
   it("records rate-limit admission before hashing the OTP", async () => {
@@ -830,6 +855,35 @@ describe("verifyOtp", () => {
       }),
       "OTP_ALREADY_USED",
     );
+  });
+
+  it("issues exactly one session when the same code is verified concurrently", async () => {
+    const { deps, store, advance } = setup();
+    const request = await requestOtp(deps, { phone: PHONE, ipHash: "ip-hash" });
+    advance(5);
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        verifyOtp(deps, {
+          challengeId: request.challengeId,
+          code: "123456",
+          ipHash: "ip-hash",
+        }),
+      ),
+    );
+
+    assert.equal(
+      results.filter((result) => result.status === "fulfilled").length,
+      1,
+    );
+    assert.equal(store.getSessions().length, 1);
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        assert.ok(result.reason instanceof AuthError);
+        assert.equal(result.reason.code, "OTP_ALREADY_USED");
+      }
+    }
   });
 
   it("increments attempts and locks after the maximum", async () => {

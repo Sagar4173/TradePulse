@@ -194,7 +194,12 @@ export type OtpProvider = {
    * to the UI. Delivery providers send the code and return nothing.
    */
   kind: OtpProviderKind;
-  send(input: { phone: string; code: string }): Promise<void>;
+  send(input: {
+    phone: string;
+    code: string;
+    /** Provider-side validity hint, derived from the challenge TTL. */
+    ttlSeconds: number;
+  }): Promise<void>;
 };
 
 export type OtpServiceDeps = {
