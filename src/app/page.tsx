@@ -26,20 +26,20 @@ import { cn } from "@/lib/utils";
 
 const foundationChecks = [
   {
-    title: "Secure phone sign-in",
-    detail: "Six-digit OTP with expiry, attempt limits and request throttling.",
+    title: "Retailer catalogue and pricing",
+    detail: "Retailer-specific prices, stock visibility and active schemes.",
   },
   {
-    title: "Role-based access",
-    detail: "Central server-side permissions for admin, order desk, salesman and retailer.",
+    title: "Server-priced cart and orders",
+    detail: "Validated cart lines, order submission and order history.",
   },
   {
-    title: "PostgreSQL data layer",
-    detail: "Prisma 7 with a PostgreSQL driver adapter and additive migrations.",
+    title: "Credit and order desk",
+    detail: "Credit exposure checks, lifecycle controls and audit events.",
   },
   {
-    title: "Health endpoint",
-    detail: "Live application and database connectivity at GET /api/health.",
+    title: "AI capture and Tally export",
+    detail: "Hindi, Hinglish or English order text with Tally-compatible CSV export.",
   },
 ] as const;
 
@@ -54,19 +54,19 @@ const upcomingCapabilities = [
     icon: ShoppingCart,
     title: "Fast, repeat ordering",
     description:
-      "Quick carts and repeat lists designed for busy kirana counters and salesman-assisted order capture.",
+      "Server-priced carts and a straightforward order submission flow for busy kirana counters.",
   },
   {
     icon: Sparkles,
     title: "AI-assisted capture",
     description:
-      "Order text, handwritten images and Hindi or Hinglish voice messages turned into reviewable orders.",
+      "Hindi, Hinglish or English order text turned into reviewable cart lines with deterministic matching.",
   },
   {
     icon: ShieldCheck,
     title: "Control and audit",
     description:
-      "Order-desk review, credit holds, scheme calculations and a dependable activity trail.",
+      "Order-desk review, credit holds, lifecycle controls and a dependable activity trail.",
   },
 ] as const;
 
@@ -95,10 +95,10 @@ export default function Home() {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <a
-            href="#foundation"
+            href="#platform"
             className="hidden rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
           >
-            Foundation
+            Platform
           </a>
           <Link
             href="/login"
@@ -159,13 +159,13 @@ export default function Home() {
                 <ArrowUpRight data-icon="inline-end" />
               </a>
               <a
-                href="#foundation"
+                href="#platform"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "lg" }),
                   "bg-background/70 backdrop-blur",
                 )}
               >
-                Explore the foundation
+                Explore the platform
                 <ArrowDown data-icon="inline-end" />
               </a>
             </div>
@@ -194,19 +194,19 @@ export default function Home() {
             <CardHeader className="gap-3">
               <div className="flex items-center justify-between gap-4">
                 <Badge variant="secondary" className="rounded-full">
-                  Access foundation ready
+                  Release ready
                 </Badge>
                 <span className="text-xs font-medium tracking-[0.18em] text-muted-foreground">
-                  MILESTONE 02
+                  MILESTONES 2–5
                 </span>
               </div>
               <CardTitle className="max-w-sm text-2xl leading-tight tracking-tight">
-                A secure base for distribution operations.
+                One workflow from catalogue to order desk.
               </CardTitle>
               <CardDescription className="max-w-md leading-6">
-                Phone authentication, role-aware access and a protected
-                application shell are in place. Ordering and AI capture remain
-                upcoming milestones.
+                Retailer ordering, server-side pricing, credit-aware order
+                management, AI order capture and Tally-compatible export are
+                integrated in this release.
               </CardDescription>
             </CardHeader>
 
@@ -247,17 +247,17 @@ export default function Home() {
         </section>
 
         <section
-          id="foundation"
-          aria-labelledby="foundation-heading"
+          id="platform"
+          aria-labelledby="platform-heading"
           className="scroll-mt-8 border-t border-border/70 py-14 lg:py-20"
         >
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-                The road ahead
+                Integrated release
               </p>
               <h2
-                id="foundation-heading"
+                id="platform-heading"
                 className="mt-3 max-w-2xl text-balance text-3xl font-semibold tracking-tight sm:text-4xl"
               >
                 Built for the way distribution actually works.
@@ -267,7 +267,7 @@ export default function Home() {
               variant="outline"
               className="w-fit rounded-full bg-background/70 px-3 py-1 text-muted-foreground backdrop-blur"
             >
-              Planned modules
+              Shipped modules
             </Badge>
           </div>
 
@@ -292,17 +292,18 @@ export default function Home() {
           </div>
 
           <p className="mt-6 max-w-3xl text-xs leading-5 text-muted-foreground">
-            These modules remain upcoming beyond Milestone 2. TradePulse
-            currently ships secure phone sign-in, role-based access, a protected
-            application shell, the relational data model, seed data and a health
-            check.
+            Milestones 2–5 are integrated in this release: phone authentication
+            and role-based access, retailer catalogue and pricing, order and
+            credit workflows, deterministic AI order capture, and
+            Tally-compatible CSV export. Production SMS delivery requires a
+            configured provider.
           </p>
         </section>
       </main>
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-2 border-t border-border/70 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
         <p>TradePulse · Smarter Distribution. Faster Ordering.</p>
-        <p>Milestone 02 · Authentication, roles &amp; protected shell</p>
+        <p>Milestones 2–5 · Authentication, catalogue, orders &amp; AI capture</p>
       </footer>
     </div>
   );
