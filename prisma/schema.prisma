@@ -118,6 +118,7 @@ model Retailer {
 
   users               User[]
   prices              RetailerProductPrice[]
+  productAliases      ProductAlias[]
   orders              Order[]
   salesmanAssignments SalesmanRetailerAssignment[]
   linkRequests        RetailerLinkRequest[]
@@ -142,6 +143,7 @@ model Product {
 
   inventory  Inventory?
   prices     RetailerProductPrice[]
+  aliases    ProductAlias[]
   schemes    Scheme[]
   orderItems OrderItem[]
 
@@ -173,6 +175,28 @@ model Inventory {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+}
+
+/// Retailer-confirmed shorthand for one catalogue SKU. The unique key keeps a
+/// normalised phrase unambiguous within a retailer; the same phrase may mean
+/// different products for different retailers.
+model ProductAlias {
+  id                String   @id @default(cuid())
+  retailerId        String
+  productSku        String
+  phrase            String   @db.VarChar(200)
+  normalizedPhrase  String   @db.VarChar(200)
+  confirmationCount Int      @default(1)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  retailer Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productSku], references: [sku], onDelete: Restrict)
+
+  @@unique([retailerId, normalizedPhrase])
+  @@index([retailerId, isActive])
+  @@index([productSku])
 }
 
 model Scheme {

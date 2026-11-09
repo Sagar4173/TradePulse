@@ -10,7 +10,7 @@ import {
 } from "@/lib/auth/permissions";
 import { getSession } from "@/lib/auth/session";
 import { resolveRetailerCartOwner } from "@/lib/cart/owner";
-import { clearCartCookie, readCartCookieLines } from "@/lib/cart/store";
+import { clearCartCookie, readCartCookieLines, readCartCookieOrigin } from "@/lib/cart/store";
 
 import type {
   CheckoutActionState,
@@ -67,6 +67,7 @@ export async function submitCheckoutAction(
 
   const owner = resolveRetailerCartOwner(session.user)!;
   const lines = await readCartCookieLines(owner);
+  const source = await readCartCookieOrigin(owner);
   const idempotencyKey = String(formData.get("idempotencyKey") ?? "").trim();
   const reviewToken = String(formData.get("review") ?? "");
   const review = parseCheckoutReview(reviewToken);
@@ -78,6 +79,7 @@ export async function submitCheckoutAction(
       retailerId: session.user.retailerId,
     },
     lines,
+    source,
     idempotencyKey,
     review,
   });

@@ -9,14 +9,18 @@
  */
 
 export const CART_COOKIE_NAME = "tradepulse_cart";
-export const CART_COOKIE_VERSION = 1;
+export const CART_COOKIE_VERSION = 2;
+export const CART_ORIGINS = ["MANUAL", "AI_TEXT"] as const;
 export const MAX_CART_LINES = 50;
 export const MAX_LINE_QUANTITY = 999;
 export const CART_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 /** Conservative limit below the usual 4 KB browser cookie cap. */
 export const MAX_ENCODED_CART_LENGTH = 3_800;
 const MAX_DECODE_LENGTH = 8_000;
+const LEGACY_CART_COOKIE_VERSION = 1;
 const SKU_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export type CartOrigin = (typeof CART_ORIGINS)[number];
 
 export type CartOwner = {
   userId: string;
@@ -30,6 +34,7 @@ export type CartLineInput = {
 
 export type CartCookiePayload = CartOwner & {
   v: typeof CART_COOKIE_VERSION;
+  origin: CartOrigin;
   lines: CartLineInput[];
 };
 
@@ -112,15 +117,21 @@ export function countCartUnits(lines: readonly CartLineInput[]): number {
 export function encodeCartCookie(
   owner: CartOwner,
   lines: readonly CartLineInput[],
+  origin: CartOrigin = "MANUAL",
 ): string {
   if (!isValidOwnerPart(owner.userId) || !isValidOwnerPart(owner.retailerId)) {
     throw new CartCookieError("Cart owner is invalid.");
+  }
+
+  if (!CART_ORIGINS.includes(origin)) {
+    throw new CartCookieError("Cart origin is invalid.");
   }
 
   const payload: CartCookiePayload = {
     v: CART_COOKIE_VERSION,
     userId: owner.userId,
     retailerId: owner.retailerId,
+    origin,
     lines: normalizeCartLines(lines),
   };
 
@@ -155,12 +166,29 @@ export function decodeCartCookie(
   }
 
   const candidate = parsed as Record<string, unknown>;
+  const version = candidate.v;
 
   if (
-    candidate.v !== CART_COOKIE_VERSION ||
+    (version !== CART_COOKIE_VERSION &&
+      version !== LEGACY_CART_COOKIE_VERSION) ||
     !isValidOwnerPart(candidate.userId) ||
     !isValidOwnerPart(candidate.retailerId) ||
     !Array.isArray(candidate.lines)
+  ) {
+    return null;
+  }
+
+  const origin: CartOrigin =
+    version === LEGACY_CART_COOKIE_VERSION
+      ? "MANUAL"
+      : CART_ORIGINS.includes(candidate.origin as CartOrigin)
+        ? (candidate.origin as CartOrigin)
+        : "MANUAL";
+
+  if (
+    version === CART_COOKIE_VERSION &&
+    candidate.origin !== undefined &&
+    !CART_ORIGINS.includes(candidate.origin as CartOrigin)
   ) {
     return null;
   }
@@ -179,8 +207,26 @@ export function decodeCartCookie(
     v: CART_COOKIE_VERSION,
     userId: candidate.userId,
     retailerId: candidate.retailerId,
+    origin,
     lines,
   };
+}
+
+export function readCartOrigin(
+  value: string | null | undefined,
+  owner: CartOwner,
+): CartOrigin {
+  const payload = decodeCartCookie(value);
+
+  if (
+    !payload ||
+    payload.userId !== owner.userId ||
+    payload.retailerId !== owner.retailerId
+  ) {
+    return "MANUAL";
+  }
+
+  return payload.origin;
 }
 
 export function readCartLines(

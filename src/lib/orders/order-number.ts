@@ -17,6 +17,14 @@ const kolkataDateFormatter = new Intl.DateTimeFormat("en-CA", {
 });
 
 function formatKolkataDate(date: Date): string {
+  return formatKolkataIsoDate(date).replaceAll("-", "");
+}
+
+/**
+ * The Asia/Kolkata calendar date as `YYYY-MM-DD`. Exported so exports and
+ * order numbering share one timezone source of truth.
+ */
+export function formatKolkataIsoDate(date: Date): string {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     throw new Error("A valid order date is required.");
   }
@@ -30,7 +38,7 @@ function formatKolkataDate(date: Date): string {
     throw new Error("Could not resolve the order date.");
   }
 
-  return `${year}${month}${day}`;
+  return `${year}-${month}-${day}`;
 }
 
 export function formatOrderNumber(date: Date, sequence: number): string {

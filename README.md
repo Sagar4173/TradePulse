@@ -103,6 +103,7 @@ The authoritative map is `src/lib/auth/permissions.ts`. Navigation is derived fr
 | Own orders | Yes | — | — | — |
 | Assigned-retailer orders | — | Yes | — | — |
 | All orders | — | — | Yes | Yes |
+| Tally CSV export | — | — | Yes | Yes |
 | Own credit information | Yes | — | — | — |
 | All retailer credit | — | — | Yes | Yes |
 | Assigned retailers | — | Yes | — | — |
@@ -465,6 +466,17 @@ Conventions:
 ### Price history
 
 `RetailerProductPrice` stores the current price only. Historical prices are captured on `OrderItem` at order time, so changing a product or retailer price never rewrites an existing order.
+
+### Order Desk Tally export
+
+`/orders/export` provides a read-only, Tally-compatible **CSV** export for the Order Desk and administrators. It is not native Tally XML.
+
+- **Eligible orders:** `APPROVED`, `PROCESSING`, `READY_FOR_DISPATCH`, `DISPATCHED`, `DELIVERED`, and `FULFILLED`. `DRAFT`, `PENDING_REVIEW`, `ON_CREDIT_HOLD`, `REJECTED`, and `CANCELLED` are never exported.
+- **Fields:** order number, order date, customer name, SKU, product name, unit, paid quantity, free quantity, unit price, discount, scheme name/type/percentage, GST rate, GST amount, line total, and order total. The CSV is line-level, so order fields repeat on every line.
+- **Pricing basis:** `OrderItem.unitPrice` is **GST-exclusive**. The scheme discount reduces the taxable value; for `BUY_X_GET_Y` it equals the value of the free units. `OrderItem.lineTotal` and `Order.total` are **GST-inclusive**. All values come from the immutable order snapshots, never from current catalogue prices.
+- **Customer data:** customer name is the retailer's current `shopName`. No GSTIN is exported because the schema does not store one.
+- **Bounds and filters:** inclusive `Asia/Kolkata` date filters; at most 500 orders and 5,000 lines per export. The preview summary is itself bounded: it reads at most 501 orders, shows `500+` when the cap is exceeded, and refuses the download. Empty or over-limit ranges render an explanatory state instead of a file.
+- **Safety:** UTF-8 with BOM, quoted and escaped cells, formula-injection prefixes neutralized (including values that start with whitespace), deterministic filename, and `Cache-Control: no-store`. Each successful download appends an `ORDER_TALLY_EXPORTED` / `OrderExport` audit event with aggregate counts only. Eligibility is evaluated when the export query runs, and exporting never creates or modifies an order.
 
 ## Seed data
 

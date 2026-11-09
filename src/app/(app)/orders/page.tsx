@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Clock3,
+  Download,
   IndianRupee,
   Store,
 } from "lucide-react";
@@ -294,6 +295,20 @@ export default async function OrdersPage({
             : canManage
               ? "Review, approve, process, dispatch, and deliver orders across the network. Rejections and cancellations require a reason."
               : "Orders from your assigned retailers only. Access outside this field scope is denied on the server."
+        }
+        actions={
+          hasPermission(session.user.role, PERMISSIONS.ORDERS_EXPORT) ? (
+            <Link
+              href="/orders/export"
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "min-h-11",
+              )}
+            >
+              <Download aria-hidden="true" className="size-4" />
+              Tally export
+            </Link>
+          ) : undefined
         }
       />
 

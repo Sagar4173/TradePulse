@@ -10,6 +10,7 @@ import {
   Package,
   ScrollText,
   ShoppingCart,
+  Sparkles,
   Store,
   UserCircle,
   Users,
@@ -37,6 +38,7 @@ import { cn } from "@/lib/utils";
 const NAV_ICONS = {
   dashboard: LayoutDashboard,
   catalogue: Package,
+  capture: Sparkles,
   cart: ShoppingCart,
   orders: ClipboardList,
   retailers: Store,

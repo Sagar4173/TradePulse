@@ -85,12 +85,8 @@ describe("order filters", () => {
 
   it("builds an inclusive Asia/Kolkata date range", () => {
     const range = orderDateRange({
-      query: "",
-      status: "all",
       from: "2026-11-01",
       to: "2026-11-01",
-      sort: "newest",
-      page: 1,
     });
 
     assert.equal(range.gte?.toISOString(), "2026-10-31T18:30:00.000Z");

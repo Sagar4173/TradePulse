@@ -117,7 +117,7 @@ function nextDate(value: string): string {
   ].join("-");
 }
 
-export function orderDateRange(filters: OrderFilters): {
+export function orderDateRange(filters: Pick<OrderFilters, "from" | "to">): {
   gte: Date | null;
   lt: Date | null;
 } {

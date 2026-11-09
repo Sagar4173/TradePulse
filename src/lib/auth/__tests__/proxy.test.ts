@@ -8,6 +8,7 @@ import { config, proxy } from "../../../proxy";
 const PROTECTED_PREFIXES = [
   "/dashboard",
   "/catalogue",
+  "/ai-capture",
   "/cart",
   "/orders",
   "/retailers",

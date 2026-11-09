@@ -3,7 +3,7 @@ import "server-only";
 import type { Role } from "@/lib/auth/types";
 import { fetchCartProducts } from "@/lib/cart/repository";
 import { calculateCart } from "@/lib/cart/calc";
-import type { CartLineInput } from "@/lib/cart/cookie";
+import type { CartLineInput, CartOrigin } from "@/lib/cart/cookie";
 import type { CheckoutLineChange, CheckoutReview } from "@/lib/orders/checkout";
 import {
   buildCheckoutFingerprint,
@@ -136,11 +136,14 @@ async function currentShortages(
 export async function submitOrder(input: {
   actor: SubmitOrderActor;
   lines: readonly CartLineInput[];
+  source?: CartOrigin;
   idempotencyKey: string;
   review: CheckoutReview | null;
   now?: Date;
 }): Promise<SubmitOrderResult> {
   const { actor, lines, idempotencyKey, review } = input;
+  const source: CartOrigin =
+    input.source === "AI_TEXT" ? "AI_TEXT" : "MANUAL";
   const now = input.now ?? new Date();
   const retailerId = actor.retailerId;
 
@@ -365,7 +368,7 @@ export async function submitOrder(input: {
               discount: paiseToDecimalString(summary.discountPaise),
               gstAmount: paiseToDecimalString(summary.gstPaise),
               total,
-              source: "MANUAL",
+              source,
               items: {
                 create: orderableLines.map((line) => ({
                   productSku: line.sku,

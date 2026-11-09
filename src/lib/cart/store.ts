@@ -9,7 +9,9 @@ import {
   countCartUnits,
   encodeCartCookie,
   readCartLines,
+  readCartOrigin,
   type CartLineInput,
+  type CartOrigin,
   type CartOwner,
 } from "./cookie";
 
@@ -20,14 +22,22 @@ export async function readCartCookieLines(
   return readCartLines(cookieStore.get(CART_COOKIE_NAME)?.value, owner);
 }
 
+export async function readCartCookieOrigin(
+  owner: CartOwner,
+): Promise<CartOrigin> {
+  const cookieStore = await cookies();
+  return readCartOrigin(cookieStore.get(CART_COOKIE_NAME)?.value, owner);
+}
+
 export async function writeCartCookieLines(
   owner: CartOwner,
   lines: readonly CartLineInput[],
+  origin: CartOrigin = "MANUAL",
 ): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(
     CART_COOKIE_NAME,
-    encodeCartCookie(owner, lines),
+    encodeCartCookie(owner, lines, origin),
     buildCartCookieOptions(getAuthConfig().isProduction),
   );
 }

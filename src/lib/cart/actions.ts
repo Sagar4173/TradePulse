@@ -21,6 +21,7 @@ import { fetchCartProducts } from "./repository";
 import {
   clearCartCookie,
   readCartCookieLines,
+  readCartCookieOrigin,
   writeCartCookieLines,
 } from "./store";
 
@@ -92,6 +93,7 @@ export async function addToCartAction(
 
   try {
     const lines = await readCartCookieLines(authorization.owner);
+    const origin = await readCartCookieOrigin(authorization.owner);
     const existing = lines.find((line) => line.sku === sku)?.quantity ?? 0;
     const desiredQuantity = existing + quantity;
 
@@ -128,7 +130,7 @@ export async function addToCartAction(
       return failure(result.code);
     }
 
-    await writeCartCookieLines(authorization.owner, result.lines);
+    await writeCartCookieLines(authorization.owner, result.lines, origin);
     revalidatePath("/", "layout");
 
     return success("ADDED", {
@@ -164,6 +166,7 @@ export async function updateCartLineAction(
 
   try {
     const lines = await readCartCookieLines(authorization.owner);
+    const origin = await readCartCookieOrigin(authorization.owner);
 
     if (!lines.some((line) => line.sku === sku)) {
       return failure("LINE_NOT_FOUND");
@@ -198,7 +201,7 @@ export async function updateCartLineAction(
       return failure(result.code);
     }
 
-    await writeCartCookieLines(authorization.owner, result.lines);
+    await writeCartCookieLines(authorization.owner, result.lines, origin);
     revalidatePath("/", "layout");
 
     return success("UPDATED", {
@@ -229,13 +232,14 @@ export async function removeCartLineAction(
 
   try {
     const lines = await readCartCookieLines(authorization.owner);
+    const origin = await readCartCookieOrigin(authorization.owner);
 
     if (!lines.some((line) => line.sku === sku)) {
       return failure("LINE_NOT_FOUND");
     }
 
     const result = removeCartLine(lines, sku);
-    await writeCartCookieLines(authorization.owner, result);
+    await writeCartCookieLines(authorization.owner, result, origin);
     revalidatePath("/", "layout");
 
     return success("REMOVED", {

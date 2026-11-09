@@ -11,6 +11,7 @@ import {
   encodeCartCookie,
   normalizeCartLines,
   readCartLines,
+  readCartOrigin,
 } from "../cookie";
 
 const OWNER = { userId: "user_1", retailerId: "retailer_1" };
@@ -25,9 +26,10 @@ describe("encodeCartCookie / decodeCartCookie", () => {
     const decoded = decodeCartCookie(encoded);
 
     assert.deepEqual(decoded, {
-      v: 1,
+      v: 2,
       userId: "user_1",
       retailerId: "retailer_1",
+      origin: "MANUAL",
       lines: [
         { sku: "SKU-BS-075", quantity: 10 },
         { sku: "SKU-DT-1KG", quantity: 2 },
@@ -79,7 +81,7 @@ describe("encodeCartCookie / decodeCartCookie", () => {
     assert.equal(
       decodeCartCookie(
         Buffer.from(
-          JSON.stringify({ v: 2, ...OWNER, lines: [] }),
+          JSON.stringify({ v: 3, ...OWNER, lines: [] }),
         ).toString("base64url"),
       ),
       null,
@@ -109,6 +111,48 @@ describe("encodeCartCookie / decodeCartCookie", () => {
         ),
       CartCookieError,
     );
+  });
+});
+
+describe("cart origin", () => {
+  it("round-trips an AI_TEXT origin without storing prices", () => {
+    const encoded = encodeCartCookie(
+      OWNER,
+      [{ sku: "SKU-BS-075", quantity: 2 }],
+      "AI_TEXT",
+    );
+
+    assert.equal(decodeCartCookie(encoded)?.origin, "AI_TEXT");
+    assert.equal(readCartOrigin(encoded, OWNER), "AI_TEXT");
+    assert.equal(encoded.includes("sellingPrice"), false);
+    assert.equal(encoded.includes("950"), false);
+  });
+
+  it("treats legacy version 1 carts as manual", () => {
+    const legacy = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        ...OWNER,
+        lines: [{ sku: "SKU-BS-075", quantity: 2 }],
+      }),
+    ).toString("base64url");
+
+    assert.equal(decodeCartCookie(legacy)?.v, 2);
+    assert.equal(readCartOrigin(legacy, OWNER), "MANUAL");
+  });
+
+  it("does not expose another owner's origin", () => {
+    const encoded = encodeCartCookie(
+      OWNER,
+      [{ sku: "SKU-BS-075", quantity: 2 }],
+      "AI_TEXT",
+    );
+
+    assert.equal(
+      readCartOrigin(encoded, { userId: "user_2", retailerId: "retailer_1" }),
+      "MANUAL",
+    );
+    assert.equal(readCartOrigin(undefined, OWNER), "MANUAL");
   });
 });
 

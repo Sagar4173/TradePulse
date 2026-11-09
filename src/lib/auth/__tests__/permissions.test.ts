@@ -22,8 +22,11 @@ describe("role permissions", () => {
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_VIEW_OWN), true);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_SUBMIT_OWN), true);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_CANCEL_OWN), true);
+    assert.equal(hasPermission(role, PERMISSIONS.AI_CAPTURE_USE), true);
+    assert.equal(hasPermission(role, PERMISSIONS.AI_CAPTURE_MANAGE), false);
     assert.equal(hasPermission(role, PERMISSIONS.CREDIT_VIEW_OWN), true);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_MANAGE), false);
+    assert.equal(hasPermission(role, PERMISSIONS.ORDERS_EXPORT), false);
     assert.equal(hasPermission(role, PERMISSIONS.ORDERS_VIEW_ALL), false);
     assert.equal(hasPermission(role, PERMISSIONS.RETAILERS_VIEW_ALL), false);
     assert.equal(hasPermission(role, PERMISSIONS.USERS_VIEW), false);
@@ -33,7 +36,9 @@ describe("role permissions", () => {
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_VIEW_ASSIGNED), true);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.RETAILERS_VIEW_ASSIGNED), true);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_MANAGE), false);
+    assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_EXPORT), false);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_SUBMIT_OWN), false);
+    assert.equal(hasPermission("SALESMAN", PERMISSIONS.AI_CAPTURE_USE), false);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.ORDERS_VIEW_ALL), false);
     assert.equal(hasPermission("SALESMAN", PERMISSIONS.USERS_VIEW), false);
   });
@@ -41,7 +46,9 @@ describe("role permissions", () => {
   it("gives order desk explicit all-order and retailer visibility but no user management", () => {
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_VIEW_ALL), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_MANAGE), true);
+    assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_EXPORT), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.ORDERS_SUBMIT_OWN), false);
+    assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.AI_CAPTURE_USE), false);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.RETAILERS_VIEW_ALL), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.CREDIT_VIEW_ALL), true);
     assert.equal(hasPermission("ORDER_DESK", PERMISSIONS.USERS_VIEW), false);
@@ -109,7 +116,7 @@ describe("role navigation", () => {
   it("matches the milestone navigation for each role", () => {
     assert.deepEqual(
       getNavigationForRole("RETAILER").map((item) => item.href),
-      ["/dashboard", "/catalogue", "/cart", "/orders", "/account"],
+      ["/dashboard", "/catalogue", "/ai-capture", "/cart", "/orders", "/account"],
     );
     assert.deepEqual(
       getNavigationForRole("SALESMAN").map((item) => item.href),
