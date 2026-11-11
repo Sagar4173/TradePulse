@@ -7,7 +7,7 @@ import { getPrismaClient } from "../../src/lib/db";
 import { loadAuthConfig } from "../../src/lib/auth/config";
 import { AuthError } from "../../src/lib/auth/errors";
 import { createPrismaAuthStore } from "../../src/lib/auth/store-prisma";
-import { requestOtp } from "../../src/lib/auth/otp-service";
+import { requestOtp, verifyOtp } from "../../src/lib/auth/otp-service";
 import type {
   AuthConfig,
   AuthStore,
@@ -15,7 +15,11 @@ import type {
   OtpServiceDeps,
 } from "../../src/lib/auth/types";
 import { applyMigrations } from "./helpers/migrations";
-import { createTestDatabase, resetTestData } from "./helpers/test-database";
+import {
+  closeTestDatabase,
+  createTestDatabase,
+  resetTestData,
+} from "./helpers/test-database";
 
 const PHONE = "+919876543210";
 
@@ -106,9 +110,11 @@ describe("OTP admission against PostgreSQL", () => {
   });
 
   after(async () => {
-    await prisma.$disconnect();
-    await client.end();
-    await database.drop();
+    await closeTestDatabase({
+      client,
+      database,
+      disconnect: () => prisma.$disconnect(),
+    });
   });
 
   it("serializes concurrent admission for one phone and admits exactly one", async () => {
@@ -214,6 +220,48 @@ describe("OTP admission against PostgreSQL", () => {
       [reservation.id],
     );
     assert.equal(challenges.rows[0]?.count, 1);
+  });
+
+  it("issues exactly one session when the same OTP is verified concurrently", async () => {
+    const store = createPrismaAuthStore();
+    const { deps, advance } = createDeps(store);
+    const request = await requestOtp(deps, {
+      phone: PHONE,
+      ipHash: "ip-hash",
+    });
+    advance(5);
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        verifyOtp(deps, {
+          challengeId: request.challengeId,
+          code: "123456",
+          ipHash: "ip-hash",
+        }),
+      ),
+    );
+
+    assert.equal(
+      results.filter((result) => result.status === "fulfilled").length,
+      1,
+    );
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        assert.equal(rejectionCode(result), "OTP_ALREADY_USED");
+      }
+    }
+
+    const sessions = await client.query<{ count: number }>(
+      'SELECT COUNT(*)::int AS count FROM "Session"',
+    );
+    assert.equal(sessions.rows[0]?.count, 1);
+
+    const challenges = await client.query<{ consumedAt: Date | null }>(
+      'SELECT "consumedAt" FROM "OtpChallenge" WHERE id = $1',
+      [request.challengeId],
+    );
+    assert.ok(challenges.rows[0]?.consumedAt);
   });
 
   it("rejects completion after the admission lease expires", async () => {

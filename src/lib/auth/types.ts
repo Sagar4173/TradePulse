@@ -80,6 +80,15 @@ export type OtpRateLimitScope = {
   requestIpHash: string | null;
 };
 
+export type OtpAdmissionState = {
+  /** Latest completed or in-flight request used for the resend cooldown. */
+  latestActiveRequestAt: Date | null;
+  /** All admitted requests for the phone in the window, including failures. */
+  phoneRequestCount: number;
+  /** All admitted requests for the IP in the window, including failures. */
+  ipRequestCount: number;
+};
+
 export type CreateSessionInput = {
   tokenHash: string;
   userId: string;
@@ -111,6 +120,10 @@ export interface AuthStore {
    * The supplied store must be bound to the same transaction so the
    * cooldown/count checks and reservation insert are one serialized operation.
    * Expensive OTP hashing must happen after this callback returns.
+   *
+   * Implementations may reject with `OtpAdmissionBusyError` when the keys stay
+   * contended beyond the bounded lock wait. Callers must translate that into a
+   * controlled retry response, never a server error.
    */
   withOtpAdmissionLock<T>(
     scope: OtpRateLimitScope,
@@ -118,25 +131,15 @@ export interface AuthStore {
   ): Promise<T>;
 
   /**
-   * Marks expired pending reservations as ABANDONED. The update is scoped to
-   * the admission keys being evaluated so one request does not rewrite every
-   * tenant's reservation history.
+   * Expires stale reservations for the admission keys and reads the values the
+   * caller needs to decide admission. Implementations must keep this as one
+   * short critical section: the admission lock is held while it runs, so extra
+   * round trips delay every request queued behind the same phone or IP.
    */
-  expireStaleOtpReservations(
+  readOtpAdmissionState(
     scope: OtpRateLimitScope,
-    now: Date,
-  ): Promise<void>;
-  /** Latest completed or in-flight request used for resend cooldown. */
-  latestActiveOtpRequestForPhone(
-    phone: string,
-    now: Date,
-  ): Promise<Date | null>;
-  /** All admitted requests for the phone in the window, including failures. */
-  countOtpRequestsSince(phone: string, since: Date): Promise<number>;
-  countOtpRequestsByIpSince(
-    requestIpHash: string,
-    since: Date,
-  ): Promise<number>;
+    window: { now: Date; windowStart: Date },
+  ): Promise<OtpAdmissionState>;
   createOtpReservation(
     input: CreateOtpReservationInput,
   ): Promise<OtpReservationRecord>;
@@ -194,7 +197,12 @@ export type OtpProvider = {
    * to the UI. Delivery providers send the code and return nothing.
    */
   kind: OtpProviderKind;
-  send(input: { phone: string; code: string }): Promise<void>;
+  send(input: {
+    phone: string;
+    code: string;
+    /** Provider-side validity hint, derived from the challenge TTL. */
+    ttlSeconds: number;
+  }): Promise<void>;
 };
 
 export type OtpServiceDeps = {

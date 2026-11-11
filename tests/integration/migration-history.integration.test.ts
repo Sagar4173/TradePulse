@@ -4,7 +4,10 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { Client } from "pg";
 
 import { applyMigrations } from "./helpers/migrations";
-import { createTestDatabase } from "./helpers/test-database";
+import {
+  closeTestDatabase,
+  createTestDatabase,
+} from "./helpers/test-database";
 
 const MIGRATION_3 = "20261106120000_otp_reservations_retailer_link_reviews";
 const MIGRATION_4 = "20261107120000_retailer_link_history_fks";
@@ -71,8 +74,7 @@ describe("retailer link-request migration history", () => {
   });
 
   after(async () => {
-    await client.end();
-    await database.drop();
+    await closeTestDatabase({ client, database });
   });
 
   it("preserves legacy rows and enforces history rules on upgrade", async () => {
@@ -162,7 +164,9 @@ describe("retailer link-request migration history", () => {
         typeof error === "object" &&
         error !== null &&
         "code" in error &&
-        error.code === "23503",
+        // PostgreSQL raises restrict_violation (23001) for ON DELETE RESTRICT;
+        // foreign_key_violation (23503) is used by NO ACTION.
+        error.code === "23001",
     );
   });
 

@@ -1,4 +1,4 @@
-import { AuthError } from "./errors";
+import { AuthError, OtpAdmissionBusyError } from "./errors";
 import {
   AmbiguousPhoneMatchError,
   isNormalizedIndianPhone,
@@ -57,19 +57,17 @@ export async function requestOtp(
     { phone: input.phone, requestIpHash },
     async (lockedStore) => {
       const lockedNow = deps.now();
-      await lockedStore.expireStaleOtpReservations(
-        { phone: input.phone, requestIpHash },
-        lockedNow,
+      const windowStart = new Date(
+        lockedNow.getTime() - config.otpRateWindowSeconds * 1_000,
       );
-      const latestRequestAt =
-        await lockedStore.latestActiveOtpRequestForPhone(
-          input.phone,
-          lockedNow,
-        );
+      const state = await lockedStore.readOtpAdmissionState(
+        { phone: input.phone, requestIpHash },
+        { now: lockedNow, windowStart },
+      );
 
-      if (latestRequestAt) {
+      if (state.latestActiveRequestAt) {
         const resendAt = new Date(
-          latestRequestAt.getTime() +
+          state.latestActiveRequestAt.getTime() +
             config.otpResendCooldownSeconds * 1_000,
         );
 
@@ -82,15 +80,7 @@ export async function requestOtp(
         }
       }
 
-      const windowStart = new Date(
-        lockedNow.getTime() - config.otpRateWindowSeconds * 1_000,
-      );
-      const recentPhoneRequests = await lockedStore.countOtpRequestsSince(
-        input.phone,
-        windowStart,
-      );
-
-      if (recentPhoneRequests >= config.otpMaxRequestsPerWindow) {
+      if (state.phoneRequestCount >= config.otpMaxRequestsPerWindow) {
         throw new AuthError(
           "RATE_LIMITED",
           "Too many verification requests. Please try again later.",
@@ -98,20 +88,15 @@ export async function requestOtp(
         );
       }
 
-      if (requestIpHash) {
-        const recentIpRequests =
-          await lockedStore.countOtpRequestsByIpSince(
-            requestIpHash,
-            windowStart,
-          );
-
-        if (recentIpRequests >= config.otpMaxRequestsPerIpWindow) {
-          throw new AuthError(
-            "RATE_LIMITED",
-            "Too many verification requests. Please try again later.",
-            { retryAfterSeconds: config.otpRateWindowSeconds },
-          );
-        }
+      if (
+        requestIpHash &&
+        state.ipRequestCount >= config.otpMaxRequestsPerIpWindow
+      ) {
+        throw new AuthError(
+          "RATE_LIMITED",
+          "Too many verification requests. Please try again later.",
+          { retryAfterSeconds: config.otpRateWindowSeconds },
+        );
       }
 
       return lockedStore.createOtpReservation({
@@ -123,7 +108,20 @@ export async function requestOtp(
         ),
       });
     },
-  );
+  ).catch((error: unknown) => {
+    if (error instanceof OtpAdmissionBusyError) {
+      // The database stayed contended past the bounded lock wait. Fail closed
+      // with a retryable rate-limit response instead of surfacing an
+      // infrastructure error or admitting an unverified request.
+      throw new AuthError(
+        "RATE_LIMITED",
+        "Too many verification requests. Please try again later.",
+        { retryAfterSeconds: config.otpRateWindowSeconds },
+      );
+    }
+
+    throw error;
+  });
 
   const code = deps.generateCode();
   const codeHash = await deps.hashOtp(code);
@@ -153,7 +151,11 @@ export async function requestOtp(
   let devCode: string | undefined;
 
   try {
-    await provider.send({ phone: input.phone, code });
+    await provider.send({
+      phone: input.phone,
+      code,
+      ttlSeconds: config.otpTtlSeconds,
+    });
 
     // The provider contract cannot return a code. Only the explicit local
     // development provider may reveal it, and only when the runtime config

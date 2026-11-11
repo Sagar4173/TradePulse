@@ -18,7 +18,11 @@ import {
   seedRetailer,
   seedUser,
 } from "./helpers/seed";
-import { createTestDatabase, resetTestData } from "./helpers/test-database";
+import {
+  closeTestDatabase,
+  createTestDatabase,
+  resetTestData,
+} from "./helpers/test-database";
 
 describe("retailer link review against PostgreSQL", () => {
   let database: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -53,9 +57,11 @@ describe("retailer link review against PostgreSQL", () => {
   });
 
   after(async () => {
-    await prisma.$disconnect();
-    await client.end();
-    await database.drop();
+    await closeTestDatabase({
+      client,
+      database,
+      disconnect: () => prisma.$disconnect(),
+    });
   });
 
   it("allows only one concurrent approval and records one audit event", async () => {

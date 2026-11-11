@@ -10,6 +10,7 @@ import {
 import { getPrismaClient } from "@/lib/db";
 import { buildNormalizedPhoneLookupWhere } from "@/lib/users/phone-lookup";
 
+import { OtpAdmissionBusyError } from "./errors";
 import {
   findUniqueNormalizedPhoneMatch,
   normalizeIndianPhone,
@@ -52,6 +53,12 @@ type ReservationRow = {
   expiresAt: Date;
   completedAt: Date | null;
   createdAt: Date;
+};
+
+type OtpAdmissionStateRow = {
+  latestActiveRequestAt: Date | null;
+  phoneRequestCount: number;
+  ipRequestCount: number;
 };
 
 type SessionRow = {
@@ -139,6 +146,47 @@ function otpLockKeys(scope: OtpRateLimitScope): string[] {
   }
 
   return keys.sort();
+}
+
+const OTP_ADMISSION_LOCK_RETRY_MS = 50;
+const OTP_ADMISSION_LOCK_WAIT_MS = 12_000;
+const OTP_ADMISSION_TRANSACTION_TIMEOUT_MS = 20_000;
+const OTP_ADMISSION_TRANSACTION_MAX_WAIT_MS = 5_000;
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+/**
+ * Takes the admission lock without blocking a single query for longer than the
+ * driver's per-query timeout. A blocking pg_advisory_xact_lock call can wait
+ * past that timeout during a burst and abort the transaction with an
+ * infrastructure error. Polling keeps each statement short, while the bounded
+ * deadline turns pathological contention into a controlled busy signal.
+ */
+async function waitForOtpAdmissionLock(
+  tx: Prisma.TransactionClient,
+  key: string,
+): Promise<void> {
+  const deadline = Date.now() + OTP_ADMISSION_LOCK_WAIT_MS;
+
+  for (;;) {
+    const rows = await tx.$queryRaw<{ locked: boolean }[]>`
+      SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS locked
+    `;
+
+    if (rows[0]?.locked) {
+      return;
+    }
+
+    if (Date.now() >= deadline) {
+      throw new OtpAdmissionBusyError();
+    }
+
+    await sleep(OTP_ADMISSION_LOCK_RETRY_MS);
+  }
 }
 
 const USER_SELECT = {
@@ -320,101 +368,85 @@ function createAuthStoreQueries(client: AuthDbClient): AuthStoreQueries {
       });
     },
 
-    async expireStaleOtpReservations(scope, now) {
-      // Only the admission keys being evaluated are rewritten. An unrelated
-      // phone's abandoned lease is not this request's responsibility.
-      const scopeFilters: Prisma.OtpRequestReservationWhereInput[] = [
-        { phone: scope.phone },
-      ];
+    async readOtpAdmissionState(scope, { now, windowStart }) {
+      // Keep the advisory-lock critical section short: one statement expires
+      // stale leases for the scope and returns every admission value. The
+      // reads do not depend on the expiry write, because expired PENDING rows
+      // are already excluded from the cooldown and the counters include rows
+      // regardless of status.
+      const rows = await client.$queryRaw<OtpAdmissionStateRow[]>`
+        WITH expired AS (
+          UPDATE "OtpRequestReservation"
+          SET "status" = 'ABANDONED'::"OtpReservationStatus",
+              "completedAt" = ${now}
+          WHERE "status" = 'PENDING'::"OtpReservationStatus"
+            AND "expiresAt" <= ${now}
+            AND (
+              "phone" = ${scope.phone}
+              OR "requestIpHash" = ${scope.requestIpHash}
+            )
+          RETURNING 1
+        )
+        SELECT
+          (
+            SELECT MAX(activity."createdAt")
+            FROM (
+              SELECT "createdAt"
+              FROM "OtpRequestReservation"
+              WHERE "phone" = ${scope.phone}
+                AND (
+                  "status" = 'CONSUMED'::"OtpReservationStatus"
+                  OR (
+                    "status" = 'PENDING'::"OtpReservationStatus"
+                    AND "expiresAt" > ${now}
+                  )
+                )
+              UNION ALL
+              SELECT "createdAt"
+              FROM "OtpChallenge"
+              WHERE "phone" = ${scope.phone}
+                AND "reservationId" IS NULL
+                AND "consumedAt" IS NULL
+            ) AS activity
+          ) AS "latestActiveRequestAt",
+          (
+            (SELECT COUNT(*)::int
+             FROM "OtpRequestReservation"
+             WHERE "phone" = ${scope.phone}
+               AND "createdAt" >= ${windowStart})
+            +
+            (SELECT COUNT(*)::int
+             FROM "OtpChallenge"
+             WHERE "phone" = ${scope.phone}
+               AND "reservationId" IS NULL
+               AND "createdAt" >= ${windowStart})
+          ) AS "phoneRequestCount",
+          (
+            (SELECT COUNT(*)::int
+             FROM "OtpRequestReservation"
+             WHERE "requestIpHash" = ${scope.requestIpHash}
+               AND "createdAt" >= ${windowStart})
+            +
+            (SELECT COUNT(*)::int
+             FROM "OtpChallenge"
+             WHERE "requestIpHash" = ${scope.requestIpHash}
+               AND "reservationId" IS NULL
+               AND "createdAt" >= ${windowStart})
+          ) AS "ipRequestCount"
+        FROM (SELECT COUNT(*) AS "expired" FROM expired) AS expired_rows
+      `;
 
-      if (scope.requestIpHash) {
-        scopeFilters.push({ requestIpHash: scope.requestIpHash });
+      const row = rows[0];
+
+      if (!row) {
+        throw new Error("OTP admission state query returned no rows.");
       }
 
-      await client.otpRequestReservation.updateMany({
-        where: {
-          status: OtpReservationStatus.PENDING,
-          expiresAt: { lte: now },
-          OR: scopeFilters,
-        },
-        data: {
-          status: OtpReservationStatus.ABANDONED,
-          completedAt: now,
-        },
-      });
-    },
-
-    async latestActiveOtpRequestForPhone(phone, now) {
-      // Only a delivered/consumed request or a live admission lease holds the
-      // resend cooldown. FAILED and ABANDONED rows still count for the rate
-      // window, but the user may retry immediately because no code arrived.
-      const [reservation, legacyChallenge] = await Promise.all([
-        client.otpRequestReservation.findFirst({
-          where: {
-            phone,
-            OR: [
-              { status: OtpReservationStatus.CONSUMED },
-              {
-                status: OtpReservationStatus.PENDING,
-                expiresAt: { gt: now },
-              },
-            ],
-          },
-          orderBy: { createdAt: "desc" },
-          select: { createdAt: true },
-        }),
-        client.otpChallenge.findFirst({
-          // Challenges created before the reservation ledger existed have no
-          // reservationId and remain authoritative while unconsumed.
-          where: { phone, reservationId: null, consumedAt: null },
-          orderBy: { createdAt: "desc" },
-          select: { createdAt: true },
-        }),
-      ]);
-
-      const candidates = [reservation?.createdAt, legacyChallenge?.createdAt].filter(
-        (date): date is Date => date instanceof Date,
-      );
-
-      if (candidates.length === 0) {
-        return null;
-      }
-
-      return new Date(Math.max(...candidates.map((date) => date.getTime())));
-    },
-
-    async countOtpRequestsSince(phone, since) {
-      const [reservations, legacyChallenges] = await Promise.all([
-        client.otpRequestReservation.count({
-          where: { phone, createdAt: { gte: since } },
-        }),
-        client.otpChallenge.count({
-          where: {
-            phone,
-            reservationId: null,
-            createdAt: { gte: since },
-          },
-        }),
-      ]);
-
-      return reservations + legacyChallenges;
-    },
-
-    async countOtpRequestsByIpSince(requestIpHash, since) {
-      const [reservations, legacyChallenges] = await Promise.all([
-        client.otpRequestReservation.count({
-          where: { requestIpHash, createdAt: { gte: since } },
-        }),
-        client.otpChallenge.count({
-          where: {
-            requestIpHash,
-            reservationId: null,
-            createdAt: { gte: since },
-          },
-        }),
-      ]);
-
-      return reservations + legacyChallenges;
+      return {
+        latestActiveRequestAt: row.latestActiveRequestAt,
+        phoneRequestCount: row.phoneRequestCount,
+        ipRequestCount: row.ipRequestCount,
+      };
     },
 
     async createOtpReservation(input) {
@@ -546,21 +578,19 @@ export function createPrismaAuthStore(): AuthStore {
     ...createAuthStoreQueries(prisma),
 
     async withOtpAdmissionLock(scope, operation) {
-      return prisma.$transaction(async (tx) => {
-        for (const key of otpLockKeys(scope)) {
-          // hashtextextended maps a namespaced key to the bigint advisory-lock
-          // space. The SELECT wrapper keeps the void-returning lock call
-          // compatible with Prisma's raw-query result mapping.
-          await tx.$queryRaw`
-            SELECT 1
-            FROM (
-              SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))
-            ) AS otp_rate_limit_lock
-          `;
-        }
+      return prisma.$transaction(
+        async (tx) => {
+          for (const key of otpLockKeys(scope)) {
+            await waitForOtpAdmissionLock(tx, key);
+          }
 
-        return operation(createLockedAuthStore(tx));
-      });
+          return operation(createLockedAuthStore(tx));
+        },
+        {
+          maxWait: OTP_ADMISSION_TRANSACTION_MAX_WAIT_MS,
+          timeout: OTP_ADMISSION_TRANSACTION_TIMEOUT_MS,
+        },
+      );
     },
 
     async completeOtpReservation(input) {
