@@ -174,11 +174,15 @@ npm run build
 npm run auth:sms-check
 ```
 
-Integration tests require a disposable PostgreSQL server supplied through
-`TRADEPULSE_TEST_DATABASE_ADMIN_URL`; they must not use Neon or production
-records. A real SMS delivery check additionally requires provider credentials,
-an approved sender, DLT approval, and explicit authorization to configure the
-target environment.
+Integration tests require an explicit disposable PostgreSQL target supplied
+through `TRADEPULSE_TEST_DATABASE_ADMIN_URL`; they must not use `neondb`,
+production records, or production-matching targets. A Neon target is accepted
+only for the explicitly allowlisted `tradepulse_test` database using a direct,
+non-pooled endpoint. That database shares the existing project's compute with
+production unless a separate Neon project/branch or an explicitly denied
+production host is used. A real SMS delivery check additionally requires
+provider credentials, an approved sender, DLT approval, and explicit
+authorization to configure the target environment.
 
 ## Limitations
 

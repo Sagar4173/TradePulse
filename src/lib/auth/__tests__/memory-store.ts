@@ -248,7 +248,7 @@ export function createMemoryAuthStore(options?: {
       }
     },
 
-    async expireStaleOtpReservations(scope, now) {
+    async readOtpAdmissionState(scope, { now, windowStart }) {
       for (const reservation of reservations.values()) {
         const matchesScope =
           reservation.phone === scope.phone ||
@@ -264,88 +264,80 @@ export function createMemoryAuthStore(options?: {
           reservation.completedAt = now;
         }
       }
-    },
 
-    async latestActiveOtpRequestForPhone(phone, now) {
-      const candidates: Date[] = [];
+      let latestActiveRequestAt: Date | null = null;
+      let phoneRequestCount = 0;
+      let ipRequestCount = 0;
+
+      const observe = (candidate: Date) => {
+        if (
+          latestActiveRequestAt === null ||
+          candidate.getTime() > latestActiveRequestAt.getTime()
+        ) {
+          latestActiveRequestAt = candidate;
+        }
+      };
 
       for (const reservation of reservations.values()) {
-        if (reservation.phone !== phone) {
+        if (reservation.phone === scope.phone) {
+          // Only a delivered/consumed request or a live admission lease holds
+          // the resend cooldown. FAILED and ABANDONED rows still count for the
+          // rate window, but the user may retry immediately because no code
+          // arrived.
+          const active =
+            reservation.status === "CONSUMED" ||
+            (reservation.status === "PENDING" &&
+              reservation.expiresAt > now);
+
+          if (active) {
+            observe(reservation.createdAt);
+          }
+
+          if (reservation.createdAt >= windowStart) {
+            phoneRequestCount += 1;
+          }
+        }
+
+        if (
+          scope.requestIpHash !== null &&
+          reservation.requestIpHash === scope.requestIpHash &&
+          reservation.createdAt >= windowStart
+        ) {
+          ipRequestCount += 1;
+        }
+      }
+
+      for (const challenge of challenges.values()) {
+        // Challenges created before the reservation ledger existed have no
+        // reservationId and remain authoritative while unconsumed.
+        if (challenge.reservationId !== null) {
           continue;
         }
 
-        const active =
-          reservation.status === "CONSUMED" ||
-          (reservation.status === "PENDING" &&
-            reservation.expiresAt > now);
+        if (challenge.phone === scope.phone) {
+          if (!challenge.consumedAt) {
+            observe(challenge.createdAt);
+          }
 
-        if (active) {
-          candidates.push(reservation.createdAt);
+          if (challenge.createdAt >= windowStart) {
+            phoneRequestCount += 1;
+          }
         }
-      }
 
-      for (const challenge of challenges.values()) {
         if (
-          challenge.phone === phone &&
-          challenge.reservationId === null &&
-          !challenge.consumedAt
+          scope.requestIpHash !== null &&
+          challenge.requestIpHash === scope.requestIpHash &&
+          challenge.createdAt >= windowStart
         ) {
-          candidates.push(challenge.createdAt);
+          ipRequestCount += 1;
         }
       }
 
-      if (candidates.length === 0) {
-        return null;
-      }
-
-      return new Date(Math.max(...candidates.map((date) => date.getTime())));
-    },
-
-    async countOtpRequestsSince(phone, since) {
-      let count = 0;
-
-      for (const reservation of reservations.values()) {
-        if (reservation.phone === phone && reservation.createdAt >= since) {
-          count += 1;
-        }
-      }
-
-      for (const challenge of challenges.values()) {
-        if (
-          challenge.phone === phone &&
-          challenge.reservationId === null &&
-          challenge.createdAt >= since
-        ) {
-          count += 1;
-        }
-      }
-
-      return count;
-    },
-
-    async countOtpRequestsByIpSince(requestIpHash, since) {
-      let count = 0;
-
-      for (const reservation of reservations.values()) {
-        if (
-          reservation.requestIpHash === requestIpHash &&
-          reservation.createdAt >= since
-        ) {
-          count += 1;
-        }
-      }
-
-      for (const challenge of challenges.values()) {
-        if (
-          challenge.requestIpHash === requestIpHash &&
-          challenge.reservationId === null &&
-          challenge.createdAt >= since
-        ) {
-          count += 1;
-        }
-      }
-
-      return count;
+      return {
+        latestActiveRequestAt,
+        phoneRequestCount,
+        ipRequestCount,
+      };
     },
 
     async createOtpReservation(input: CreateOtpReservationInput) {

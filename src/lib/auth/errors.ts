@@ -29,3 +29,16 @@ export class AuthError extends Error {
     this.attemptsRemaining = options?.attemptsRemaining;
   }
 }
+
+/**
+ * The admission keys stayed contended beyond the request's lock-wait budget.
+ * This is an infrastructure-level condition, not a domain outcome; callers
+ * must translate it into a controlled retry response instead of a server
+ * error.
+ */
+export class OtpAdmissionBusyError extends Error {
+  constructor() {
+    super("OTP admission lock wait exceeded the configured budget.");
+    this.name = "OtpAdmissionBusyError";
+  }
+}

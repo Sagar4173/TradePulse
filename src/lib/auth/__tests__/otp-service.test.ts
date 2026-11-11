@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { AuthError } from "../errors";
+import { AuthError, OtpAdmissionBusyError } from "../errors";
 import { loadAuthConfig } from "../config";
 import { hashSessionToken } from "../crypto";
 import { requestOtp, verifyOtp } from "../otp-service";
@@ -184,6 +184,24 @@ describe("requestOtp", () => {
     );
 
     assert.equal(hashCalls, 0);
+  });
+
+  it("turns an exhausted admission-lock wait into a retryable rate limit", async () => {
+    const { deps } = setup();
+
+    deps.store = {
+      ...deps.store,
+      async withOtpAdmissionLock<T>(): Promise<T> {
+        throw new OtpAdmissionBusyError();
+      },
+    };
+
+    const error = await expectAuthError(
+      requestOtp(deps, { phone: PHONE, ipHash: "ip-hash" }),
+      "RATE_LIMITED",
+    );
+
+    assert.equal(error.retryAfterSeconds, deps.config.otpRateWindowSeconds);
   });
 
   it("never returns a development code in a production config", async () => {

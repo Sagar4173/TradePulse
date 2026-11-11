@@ -15,7 +15,11 @@ import type {
   OtpServiceDeps,
 } from "../../src/lib/auth/types";
 import { applyMigrations } from "./helpers/migrations";
-import { createTestDatabase, resetTestData } from "./helpers/test-database";
+import {
+  closeTestDatabase,
+  createTestDatabase,
+  resetTestData,
+} from "./helpers/test-database";
 
 const PHONE = "+919876543210";
 
@@ -106,9 +110,11 @@ describe("OTP admission against PostgreSQL", () => {
   });
 
   after(async () => {
-    await prisma.$disconnect();
-    await client.end();
-    await database.drop();
+    await closeTestDatabase({
+      client,
+      database,
+      disconnect: () => prisma.$disconnect(),
+    });
   });
 
   it("serializes concurrent admission for one phone and admits exactly one", async () => {

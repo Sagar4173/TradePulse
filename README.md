@@ -174,7 +174,9 @@ The provisioning script requires an allowlisted host and matching target fingerp
 | `TRADEPULSE_DEV_TARGET_HOSTS` | Development only | Comma-separated allowlist of logical database hosts. |
 | `TRADEPULSE_DEV_TARGET_FINGERPRINT` | Development only | SHA-256 fingerprint printed by `npm run db:dev-target`. |
 | `TRADEPULSE_PRODUCTION_TARGET_HOSTS` | No | Optional denylist of known production hosts. |
-| `TRADEPULSE_TEST_DATABASE_ADMIN_URL` | Integration tests only | Explicit disposable PostgreSQL admin URL; Neon and production targets are rejected. |
+| `TRADEPULSE_TEST_DATABASE_ADMIN_URL` | Integration tests only | Explicit disposable PostgreSQL admin URL. Local PostgreSQL or an explicitly allowlisted Neon `tradepulse_test` database; production matching is rejected. |
+| `TRADEPULSE_TEST_DATABASE_EXPECTED_NEON_HOST` | Integration tests only | Non-secret direct Neon endpoint allowlist; required when the admin URL is Neon. |
+| `TRADEPULSE_PRODUCTION_TARGET_FINGERPRINTS` | Integration tests only | Non-secret SHA-256 production target fingerprints used for fail-closed comparison; required for Neon when no `neondb` URL is configured. |
 | `AUTH_BOOTSTRAP_ADMIN_ENABLED` | CLI only | Required by the one-time first-administrator bootstrap. |
 | `AUTH_SMS_PROVIDER` | SMS delivery | `msg91`, `twilio`, or `exotel`; production fails closed when unset or incomplete. See [SMS authentication operations](docs/sms-authentication.md). |
 | `AUTH_SMS_TIMEOUT_MS` | No | Per-attempt provider timeout; default `8000`, bounded to `1000–20000`. |
@@ -196,6 +198,7 @@ Production requires one complete SMS provider configuration; otherwise OTP reque
 | `npm run typecheck` | Generate route types, then run TypeScript without emitting. |
 | `npm test` | Run unit tests. |
 | `npm run test:integration` | Run the disposable-PostgreSQL integration suite. Requires `TRADEPULSE_TEST_DATABASE_ADMIN_URL`. |
+| `npm run db:test-target` | Read-only integration-test target preflight. Add `-- --connect` for one live read-only identity query. |
 | `npm run db:generate` | Generate Prisma Client. |
 | `npm run db:validate` | Validate the Prisma schema. |
 | `npm run db:dev-target` | Print the non-secret current database target and fingerprint. |
@@ -271,13 +274,33 @@ Release gate executed on the integrated `main` branch:
 | `prisma migrate diff` | No schema difference |
 | Production `/api/health` | HTTP `200`, database `up` |
 
-The PostgreSQL integration suite was **not run** because no disposable PostgreSQL database was available. The harness refuses Neon and production targets by design; the suite is therefore reported as blocked, not passed:
+The PostgreSQL integration suite was executed against the guarded Neon `tradepulse_test` database. **31 integration tests passed in each of three consecutive full runs** (2 migration-history, 7 OTP admission, 4 retailer-link, and 18 database-free harness tests). The same working tree reports **485/485 unit tests**, passing ESLint, TypeScript, and `prisma validate`. No generated `tradepulse_test_*` database remained afterward, and production `neondb` was never targeted.
 
-```bash
-# PowerShell example; use a disposable local/isolated PostgreSQL server only.
+Run `npm run db:test-target` before the suite; it validates the target without creating or changing anything. The harness refuses `neondb`, production-matching targets, pooled Neon administration endpoints, and production runtime signals.
+
+Local disposable PostgreSQL:
+
+```powershell
 $env:TRADEPULSE_TEST_DATABASE_ADMIN_URL = "postgresql://test_admin:password@127.0.0.1:5432/postgres?sslmode=disable"
 npm run test:integration
 ```
+
+Neon: create a separate database named `tradepulse_test` in the existing project. Use its direct, non-pooled connection string and set the non-secret endpoint allowlist. The harness creates and drops only generated `tradepulse_test_*` databases; it never migrates, truncates, or drops `tradepulse_test` itself.
+
+```powershell
+$env:TRADEPULSE_TEST_DATABASE_ADMIN_URL = "postgresql://role:password@ep-direct-endpoint.ap-southeast-1.aws.neon.tech/tradepulse_test?sslmode=require"
+$env:TRADEPULSE_TEST_DATABASE_EXPECTED_NEON_HOST = "ep-direct-endpoint.ap-southeast-1.aws.neon.tech"
+npm run db:test-target
+npm run test:integration
+```
+
+The preflight never connects unless `-- --connect` is passed, and that live check runs only one read-only `SELECT`. It also accepts `--env-file <path>` to load the two test-only values from a git-ignored local file. `npm run test:integration` loads `.env.test.local` automatically when that file exists, so the same values can be kept in one git-ignored file instead of the shell. Add `--list-generated` alongside `--connect` to verify that no generated `tradepulse_test_*` databases were left behind.
+
+If an interrupted test process leaks a generated database, `npm run db:cleanup-test -- --env-file .env.test.local --yes <name>...` removes only the explicitly named `tradepulse_test_*` databases. It is a dry run without `--yes`, and every drop re-validates the generated-name convention, the administration target, the live database identity, and ownership through the same harness guards.
+
+For Neon, the guard also compares the administration target with `DATABASE_URL` and `DIRECT_URL` from the process or `.env`; at least one of those must point at a Neon `neondb` target, or `TRADEPULSE_PRODUCTION_TARGET_FINGERPRINTS` must provide non-secret SHA-256 target fingerprints. The guard fails closed when no production comparison is available. The `neondb` check proves that a Neon production URL is configured; it does not by itself prove endpoint isolation. Local targets are checked too: `neondb` and any target matching a configured production URL are rejected.
+
+The dedicated `tradepulse_test` database shares the existing Neon project and endpoint with production unless you use a separate branch or project. Tests are isolated by database name, but they share compute and the configured role. For stronger isolation, use a separate Neon project/branch, or a dedicated test role that is not the production database owner. Set `TRADEPULSE_PRODUCTION_TARGET_HOSTS` to the production endpoint to reject it explicitly even when the database name differs.
 
 ## Security notes
 
@@ -302,7 +325,7 @@ npm run test:integration
 2. **No production user or order data** is seeded. The production database contains the demo catalogue only (one retailer, three products, schemes, prices, and inventory).
 3. **AI capture is deterministic and text-only.** It does not use an external AI model and does not process images or voice notes. Hindi is handled through transliteration/normalization and catalogue matching, not a language model.
 4. **Tally export is CSV, not native Tally XML.** The format is Tally-compatible but has not been validated against a specific Tally version or import template.
-5. **PostgreSQL integration tests are blocked** by the absence of an approved disposable database. They must not be run against Neon or production.
+5. **PostgreSQL integration tests require an explicit disposable target.** They must not use `neondb` or production-matching targets. The guarded Neon `tradepulse_test` database documented above is an allowed target; it shares the existing project's compute unless a separate Neon project/branch or `TRADEPULSE_PRODUCTION_TARGET_HOSTS` is used.
 6. **No payment, van loading, offline sync, or GSTIN capture** is implemented.
 7. The database role used by the Vercel runtime was not independently inspected. Use a least-privilege runtime role for `DATABASE_URL` and reserve the owner role for migrations.
 
